@@ -2,37 +2,16 @@
 
 from qa4sm_reader import globals
 from parse import *
-import warnings
+import warnings as warn
 
-def _build_fname_templ(n):
+
+class QA4SMDatasets():  #  todo: change netCDF ids/dcs
     """
-    Create a template to parse for the file name, based on the dataset-__version
-    separation rule from globals.
-
-    Parameters
-    ----------
-    n : int
-        Total number of (reference and candidate) values sets in the file.
-
-    Returns
-    -------
-    fname_templ : str
-        Template for the file name to parse.
+    Class that provides information on all datasets in the results file. Ids and dcs refer to the
+    1-based and 0-based index number of the datasets, respectively. For newer validations, these are always
+    the same
     """
-    parts =[globals.ds_fn_templ.format(i='{i_ref:d}', ds='{ref}', var='{ref_var}')]
-    for i in range(1, n):
-        parts += [globals.ds_fn_templ.format(i='{i_ds%i:d}' % i, ds='{ds%i}' % i,
-                                             var='{var%i}' % i)]
-    return globals.ds_fn_sep.join(parts) + '.nc'
 
-def _metr_grp(metric:str) -> int or None:
-    for g in globals.metric_groups.keys():
-        if metric in globals.metric_groups[g]:
-            return g
-    return None
-
-class QA4SMAttributes(object):
-    """ Attribute handler for QA4SM results, only from meta values """
     def __init__(self, global_attrs):
         """
         Parameters
@@ -40,43 +19,72 @@ class QA4SMAttributes(object):
         global_attrs: dict
             Global attributes of the QA4SM validation result
         """
+        # attributes of the result file
         self.meta = global_attrs
-        self._get_offset()
-        self.other_dcs, self.ref_dc = self._dcs()
 
-    def _get_offset(self):
-        self._offset_id_dc = 0
-        if 'val_ref' in self.meta.keys():
-            id = int(parse('val_dc_dataset{id}', self.meta['val_ref'])['id'])
-            if id != 0:
-                self._offset_id_dc = -1
+    def _ref_dc(self) -> int:
+        """
+        Get the position of the reference dataset from the results file as a 0-based index
 
-    def _dcs(self):
-        """ Go through the metadata and find the dataset short names """
-        ref_dc = self._ref_dc()
-        dcs = dict()
+        Returns
+        -------
+        ref_dc : int
+        """
+        ref_dc = 0
+
+        try:
+            val_ref = self.meta[globals._ref_ds_attr]
+            ref_dc = parse(globals._ds_short_name_attr, val_ref)[0]
+        except KeyError as e:
+            warn("The netCDF file does not contain the attribute {}".format(globals._ref_ds_attr))
+            raise e
+
+        return ref_dc
+
+    def _ref_id(self) -> int:
+        """Get the dataset id for the reference"""
+        dc = self._ref_dc()
+        ref_id = dc - self.offset
+
+        return ref_id
+
+    @property
+    def offset(self) -> int:
+        """Check that the dc number given to the reference is 0, change the ids if not"""
+        offset = 0
+        if self._ref_dc() != 0:
+            offset = -1
+
+        return offset
+
+    def _dcs(self) -> dict:
+        """
+        Return the ids as in the global attributes and attribute key for each dataset
+        that is not the reference
+
+        Returns
+        -------
+        dcs: dict
+            dictionary of the shape {id : attribute key}
+        """
+        dcs = {}
         for k in self.meta.keys():
             parsed = parse(globals._ds_short_name_attr, k)
             if parsed is not None and len(list(parsed)) == 1:
                 dc = list(parsed)[0]
-                if dc != ref_dc:
+                if dc != self._ref_dc():
                     dcs[dc] = k
-        return dcs, ref_dc
 
-    def _ref_dc(self):
-        """ Get the short name of the reference dataset """
-        val_ref = self.meta[globals._ref_ds_attr]
-        ref_dc = parse(globals._ds_short_name_attr, val_ref)[0]
-        return ref_dc
+        return dcs
 
-    def _dc_names(self, dc):
+    def _dc_names(self, dc:int) -> dict:
         """
-        Get dataset meta values for the passed dc.
+        Get dataset meta values for the passed dc
 
         Parameters
         ----------
         dc : int
-            The id of the dataset as in the global metadata of the results file
+            The dc of the dataset as in the global metadata of the results file
 
         Returns
         -------
@@ -84,137 +92,93 @@ class QA4SMAttributes(object):
             short name, pretty_name and short_version and pretty_version of the
             dc dataset.
         """
-        short_name = self.meta[globals._ds_short_name_attr.format(dc)]
-        pretty_name = self.meta[globals._ds_pretty_name_attr.format(dc)]
-        short_version = self.meta[globals._version_short_name_attr.format(dc)]
-        pretty_version = self.meta[globals._version_pretty_name_attr.format(dc)]
+        names = {}
 
-        return dict(short_name=short_name, pretty_name=pretty_name,
-                    short_version=short_version, pretty_version=pretty_version)
+        names['short_name'] = self.meta[globals._ds_short_name_attr.format(dc)]
+        names['pretty_name'] = self.meta[globals._ds_pretty_name_attr.format(dc)]
+        names['short_version'] = self.meta[globals._version_short_name_attr.format(dc)]
+        names['pretty_version'] = self.meta[globals._version_pretty_name_attr.format(dc)]
+        names['pretty_title'] = '{} ({})'.format(names['pretty_name'], names['pretty_version'])
 
-    def get_all_names(self) -> (dict, dict):
+        return names
+
+    @property
+    def ref_id(self):
+        """Id of the reference dataset as in the variable names"""
+        return self._ref_dc() - self._offset_id_dc
+
+    @property
+    def others_id(self):
+        """Id of the other datasets as in the variable names"""
+        return [dc - self._offset_id_dc for dc in self._dcs().keys()]
+
+    def _id2dc(self, id:int) -> int:
         """
-        Get 2 dictionaries of names, one for the ref names, one for the
-        satellite ds names.
-        """
-        return self.get_ref_names(), self.get_other_names()
-
-    def get_other_names(self) -> dict :
-        """ Get a dictionary with names of the non-reference values sets"""
-        ret = dict()
-        for dc in self.other_dcs:
-            ret[dc] = self._dc_names(dc)
-        return ret
-
-    def get_ref_names(self) -> dict :
-        """ Get a dictionary with names of the non-reference values sets"""
-        return self._dc_names(self._ref_dc())
-
-class QA4SMNamedAttributes(QA4SMAttributes):
-    """ Attribute handler for named QA4SM datasets, based on global attributes."""
-
-    def __init__(self, id, short_name, global_attrs):
-        """
-        QA4SMNamedAttributes handler for metdata lookup
+        Offset ids according to the self.offset value
 
         Parameters
         ----------
-        id : int
-            Id of the dataset as in the VARIABLE NAME (not as in the attributes)
-        short_name : str
-            Short name of the dataset as in the variable name
-        global_attrs : dict
-            Global attributes of the results file, for lookup.
+        id: int
+            1-based index value of the dataset
         """
-        super(QA4SMNamedAttributes, self).__init__(global_attrs)
+        return id + self.offset
 
-        self.id = id
-        self.__short_name = short_name
-        self.__version = self._names_from_attrs('short_version')
+    def n_datasets(self) -> int:
+        """Counts the total number of datasets (reference + others)"""
+        n_others = len(self._dcs().keys())
 
-        try:
-            assert self.short_name == self._names_from_attrs('short_name')
-        except AssertionError as e:
-            raise(e, f"Short name {self.short_name} does not match to the name in "
-                     f"attributes {self._names_from_attrs('short_name')}. "
-                     f"Is the id correct (as in the variable name)?")
-    @property
-    def short_name(self) -> str:
-        return self.__short_name
+        return n_others + 1
 
     @property
-    def version(self) -> str:
-        return self.__version
+    def ref(self) -> dict:
+        """Get a dictionary of the dataset metadata for the reference dataset"""
+        dc_name = self._dc_names(self._ref_dc())
 
-    def __eq__(self, other):
-        if (self.version == other.version) and \
-            (self.short_name == other.short_name) :
-            return  True
-        else:
-            return False
+        return dc_name
 
-    def _id2dc(self) -> int:
-        return self.id + self._offset_id_dc
+    @property
+    def others(self) -> list:
+        """Get a list with the datset metadata for oll the non-reference datasets"""
+        others_meta = []
+        for dc in self._dcs():
+            dc_name = self._dc_names(dc)
+            others_meta.append(dc_name)
 
-    def _names_from_attrs(self, element='all'):
+        return others_meta
+
+    def dataset_metadata(self, id:int, element:str or list=None) -> tuple:
         """
-        Get names for this dataset
+        Get the metadata for the dataset specified by the id. This function is used by the QA4SMMetricVariable class
 
         Parameters
         ----------
         elements : str or list
-            'all' or '__short_name' or 'pretty_name' or 'short_version' or
-            'pretty_version'
+            one of: 'all','short_name','pretty_name','short_version','pretty_version'
 
         Returns
         -------
-        dict or str : names
-            The names as a dictionary
+        meta: tuple
+            tuple with (dataset id, names dict)
         """
-        if isinstance(element, str):
-            element = [element]
-
-        dc = self._id2dc()
+        dc = self._id2dc(id=id)
         names = self._dc_names(dc=dc)
-        if element == ['all']:
-            element = list(names.keys())
+
+        if element is None:
+            meta = names
+
+        elif isinstance(element, str):
+            if not element in names.keys():
+                raise ValueError("Elements must be one of '{}'".format(', '.join(names.keys())))
+
+            meta = names[element]
+
         else:
-            if not all([e in list(names.keys()) for e in element]):
-                raise ValueError("Elements must be either 'all' or one or "
-                                 "mutliple of {}".format(
-                    ', '.join(list(names.keys()))))
+            meta = {e: names[e] for e in element}
 
-        if len(element) == 1:
-            return names[element[0]]
-        else:
-            return {e: names[e] for e in element}
+        return (id, meta)
 
-    def pretty_name(self) -> str:
-        """ get the pretty name, from meta or from globals.py """
-        try:
-            return self._names_from_attrs('pretty_name')
-        except AttributeError: # todo: what exception
-            warnings.warn('pretty name not found in metadata, fallback to globals.py')
-            if self.__short_name in globals._dataset_pretty_names.keys():
-                return globals._dataset_pretty_names[self.__short_name]
-            else:
-                warnings.warn('pretty name also not found in globals.py, use short name')
-                return self.__short_name
-
-    def pretty_version(self) -> str:
-        """ get the pretty __version name, from meta or from globals.py """
-        try:
-            return self._names_from_attrs('pretty_version')
-        except AttributeError:
-            warnings.warn('pretty __version not found in metadata, fallback to globals.py')
-            if self.__version in globals._dataset_version_pretty_names.keys():
-                return globals._dataset_version_pretty_names[self.__version]
-            else:
-                warnings.warn('pretty __version also not found in globals, use __version')
-                return self.__version
-
-
-class QA4SMMetricVariable(object):
+class QA4SMMetricVariable():
+    """Class that describes a metric variable, i.e. the metric for a specific set of Datasets"""
 
     def __init__(self, varname, global_attrs, values=None):
         """
@@ -222,53 +186,92 @@ class QA4SMMetricVariable(object):
 
         Parameters
         ---------
-        name : str
+        varname : str
             Name of the variable
         global_attrs : dict
             Global attributes of the results.
         values : pd.DataFrame, optional (default: None)
             Values of the variable, to store together with the metadata.
+
+        Attributes
+        ----------
+        metric : str
+            metric name
+        g : int
+            group number
+        ref_df : QA4SMNamedAttributes
+            reference dataset
+        other_dss : list
+            list of QA4SMNamedAttributes for the datasets that are not reference
+        metric_ds : QA4SMNamedAttributes
+            metric-relative dataset in case of TC metric
         """
 
         self.varname = varname
         self.attrs = global_attrs
-        self.metric, self.g, parts = self._parse_varname()
-        self.ref_ds, self.other_dss, self.metric_ds = self._named_attrs(parts)
         self.values = values
 
-    def _named_attrs(self, parts:dict) -> \
-            (QA4SMNamedAttributes, list, QA4SMNamedAttributes):
-        """ get the datasets from the current variable"""
+        self.metric, self.g, self.parts = self._parse_varname()
+        self.Datasets = QA4SMDatasets(self.attrs)
+        # do not initialize idx, gpi, time, _row_size (non-validation variables)
+        if self.g:
+            self.Metric = QA4SMMetric(self.metric)
+            self.ref_ds, self.metric_ds, self.other_ds = self.get_varmeta()
+            self.pretty_name = self._pretty_name()
 
-        if not self.ismetr():
-            raise IOError(self.varname, '{} is not in form of a QA4SM metric variable.')
+    @property
+    def isempty(self) -> bool:
+        """Check whether values are associated with the object or not"""
+        return self.values is None or self.values.empty
+
+    @property
+    def ismetric(self) -> bool:
+        return self.g is not None
+
+    @property
+    def id(self):
+        """Id of the metric dataset for g = 2 or 3, of the reference dataset for g = 0"""
+        if self.g:
+            if self.metric_ds:
+                return self.metric_ds[0]
+            else:
+                return self.ref_ds[0]
+
+    def _pretty_name(self):
+        """Create a nice name for the variable"""
+        name = globals._variable_pretty_name[self.g]
 
         if self.g == 0:
-            a = QA4SMAttributes(self.attrs)
-            ref_ds = QA4SMNamedAttributes(a.ref_dc - a._offset_id_dc,
-                                          a.get_ref_names()['short_name'], self.attrs)
-            return ref_ds, None, None
-        else:
-            dss = []
-            ref_ds = QA4SMNamedAttributes(parts['ref_id'], parts['ref_ds'], self.attrs)
-            ds = QA4SMNamedAttributes(parts['sat_id0'], parts['sat_ds0'], self.attrs)
-            dss.append(ds)
-            if self.g == 3:
-                ds = QA4SMNamedAttributes(parts['sat_id1'], parts['sat_ds1'], self.attrs)
-                dss.append(ds)
-                mds = QA4SMNamedAttributes(parts['mds_id'], parts['mds'], self.attrs)
-            else:
-                mds = None
-            return ref_ds, dss, mds
+            return name.format(self.metric)
+
+        elif self.g == 2:
+            return name.format(self.Metric.pretty_name, self.metric_ds[1]['pretty_title'],
+                               self.ref_ds[1]['pretty_title'])
+        elif self.g == 3:
+            return name.format(self.Metric.pretty_name, self.metric_ds[1]['pretty_title'],
+                               self.ref_ds[1]['pretty_title'], self.other_ds[1]['pretty_title'])
 
     def _parse_varname(self) -> (str, int, dict):
-        """ parse the name to get the metric, group and  """
+        """
+        Parse the name to get the metric, group and variable data
 
+        Returns
+        -------
+        metric : str
+            metric name
+        g : int
+            group
+        parts : dict
+            dictionary of MetricVariable data
+        """
         metr_groups = list(globals.metric_groups.keys())
+        # check which group it belongs to
         for g in metr_groups:
-            templ_d = globals.var_name_ds_sep[g]
-            pattern = '{}{}'.format(globals.var_name_metric_sep[g],
-                                    templ_d if templ_d is not None else '')
+            template = globals.var_name_ds_sep[g]
+            if template is None:
+                template = ''
+            pattern = '{}{}'.format(globals.var_name_metric_sep[g], template)
+            # parse infromation from pattern and name
             parts = parse(pattern, self.varname)
 
             if parts is not None and parts['metric'] in globals.metric_groups[g]:
@@ -276,42 +279,72 @@ class QA4SMMetricVariable(object):
 
         return None, None, None
 
-    def ismetr(self) -> bool:
-        """ Check whether this is a metric variable or not """
-
-        return True if self.metric is not None else False
-
-    def isempty(self):
-        """ Check whether values are associated with the object or not """
-
-        if self.values is None or self.values.empty:
-            return True
-
-    def get_varmeta(self):
+    def get_varmeta(self) -> (tuple, tuple, tuple):
         """
-        Get the dataset names based on metadata information
+        Get the datasets from the current variable. Each dataset is provided with shape
+        (id, dict{names})
 
         Returns
         -------
-        ref_meta : tuple or None
-            Names for the reference dataset
-        dss_meta : list of tuples or NOne
-            Names for the satellite datasets
-        mds_meta : tuple or None
-            Names for the metric dataset (TC only)
+        ref_ds : id, dict
+            reference dataset
+        mds : id, dict
+            this is the dataset for which the metric is calculated
+        dss : id, dict
+            this is the additional dataset in TC variables
         """
+        if self.g == 0:
+            ref_ds = self.Datasets.dataset_metadata(self.Datasets._ref_id())
+            mds, dss = None, None
 
-        if self.ref_ds is not None:
-            ref_meta = (self.ref_ds.id, self.ref_ds._names_from_attrs('all'))
         else:
-            ref_meta = None
-        if self.other_dss is not None:
-            dss_meta = [(ds.id, ds._names_from_attrs('all')) for ds in self.other_dss]
-        else:
-            dss_meta = None
-        if self.metric_ds is not None:
-            mds_meta = (self.metric_ds.id, self.metric_ds._names_from_attrs('all'))
-        else:
-            mds_meta = None
+            ref_ds = self.Datasets.dataset_metadata(self.parts['ref_id'])
+            mds = self.Datasets.dataset_metadata(self.parts['sat_id0'])
+            dss = None
+            # if metric is TC, add third dataset
+            if self.g == 3:
+                mds = self.Datasets.dataset_metadata(self.parts['mds_id'])
+                dss = self.Datasets.dataset_metadata(self.parts['sat_id1'])
+                if dss == mds:
+                    dss = self.Datasets.dataset_metadata(self.parts['sat_id0'])
+                # need this to respect old file naming convention
+                self.other_dss = [
+                    self.Datasets.dataset_metadata(self.parts['sat_id0']),
+                    self.Datasets.dataset_metadata(self.parts['sat_id1'])
+                ]
 
-        return ref_meta, dss_meta, mds_meta
+        return ref_ds, mds, dss
+
+class QA4SMMetric():
+    """Class for validation metric"""
+    def __init__(self, name, variables_list=None):
+
+        self.name = name
+        self.pretty_name = globals._metric_name[self.name]
+
+        if variables_list:
+            self.variables = variables_list
+            self.g = self._get_attribute('g')
+            self.attrs = self._get_attribute('attrs')
+
+    def _get_attribute(self, attr:str):
+        """
+        Absorb Var attribute when is equal for all variables (e.g. group, reference dataset)
+
+        Parameters
+        ----------
+        attr : str
+            attribute name for the class QA4SMMetricVariable
+
+        Returns
+        -------
+        value : attribute value
+        """
+        for n, Var in enumerate(self.variables):
+            value = getattr(Var, attr)
+            if n != 0:
+                assert value == previous, "The attribute {} is not equal in all variables".format(attr)
+            previous = value
+
+        return value
+
