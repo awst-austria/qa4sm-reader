@@ -3,7 +3,7 @@
 """
 Settings and global variables used in the reading and plotting procedures
 """
-
+# todo: reduce dependency on globals (e.g flexible if new datasets/versions are added)
 import cartopy.crs as ccrs
 
 # === plot defaults ===
@@ -11,6 +11,7 @@ matplotlib_ppi = 72  # Don't change this, it's a matplotlib convention.
 index_names = ['lat', 'lon']  # Names used for 'lattitude' and 'longitude' coordinate.
 time_name = 'time' # not used at the moment, dropped on load
 period_name = 'period' # not used at the moment, dropped on load
+
 dpi = 100  # Resolution in which plots are going to be rendered.
 title_pad = 12.0  # Padding below the title in points. default padding is matplotlib.rcParams['axes.titlepad'] = 6.0
 data_crs = ccrs.PlateCarree()  # Default map projection. use one of
@@ -27,9 +28,8 @@ max_title_len = 8 * map_figsize[0]  # maximum length of plot title in chars. if 
 
 # === boxplot_basic defaults ===
 boxplot_printnumbers = True  # Print 'median', 'nObs', 'stdDev' to the boxplot_basic.
-boxplot_figsize = [6.30, 4.68]  # size of the output figure in inches. NO MORE USED.
-boxplot_height = 4.68
-boxplot_width = 1.7  # times (n+1), where n is the number of boxes.
+boxplot_height = 6
+boxplot_width = 2 # times (n+1), where n is the number of boxes.
 boxplot_title_len = 8 * boxplot_width  # times the number of boxes. maximum length of plot title in chars.
 
 # === watermark defaults ===
@@ -58,19 +58,33 @@ _cclasses = {
 }
 
 # 0=common metrics, 2=paired metrics (2 datasets), 3=triple metrics (TC, 3 datasets)
-metric_groups = {0: ['n_obs'],
-                 2: ['R', 'p_R', 'rho','p_rho', 'RMSD', 'BIAS',
-                     'urmsd', 'mse', 'mse_corr', 'mse_bias', 'mse_var',
-                     'RSS', 'tau', 'p_tau'],
-                 3: ['snr', 'err_std', 'beta']}
+metric_groups = {
+    0: ['n_obs'],
+    2: ['R', 'p_R', 'rho','p_rho', 'RMSD', 'BIAS',
+        'urmsd', 'mse', 'mse_corr', 'mse_bias', 'mse_var',
+        'RSS', 'tau', 'p_tau'
+        ],
+    3: ['snr', 'err_std', 'beta']
+}
+
 
 # === variable template ===
 # how the metric is separated from the rest
-var_name_metric_sep = {0: "{metric}", 2: "{metric}_between_",
-                       3: "{metric}_{mds_id:d}-{mds}_between_"}
+var_name_metric_sep = {
+    0: "{metric}",
+    2: "{metric}_between_",
+    3: "{metric}_{mds_id:d}-{mds}_between_"
+}
+var_name_CI = {
+    0: "{metric}_ci_{bound}_between_",
+    2: "{metric}_ci_{bound}_between_",
+    3: "{metric}_ci_{bound}_{mds_id:d}-{mds}_between_"
+}
 # how two datasets are separated, ids must be marked as numbers with :d!
-var_name_ds_sep = {0: None, 2: "{ref_id:d}-{ref_ds}_and_{sat_id0:d}-{sat_ds0}",
-                   3: "{ref_id:d}-{ref_ds}_and_{sat_id0:d}-{sat_ds0}_and_{sat_id1:d}-{sat_ds1}"}
+var_name_ds_sep = {
+    0: None, 2: "{ref_id:d}-{ref_ds}_and_{sat_id0:d}-{sat_ds0}",
+    3: "{ref_id:d}-{ref_ds}_and_{sat_id0:d}-{sat_ds0}_and_{sat_id1:d}-{sat_ds1}"
+}
 
 # === metadata tempplates ===
 _ref_ds_attr = 'val_ref' # global meta values variable that links to the reference dc
@@ -79,6 +93,11 @@ _ds_pretty_name_attr = 'val_dc_dataset_pretty_name{:d}' # attribute convention f
 _version_short_name_attr = 'val_dc_version{:d}' # attribute convention for other datasets
 _version_pretty_name_attr = 'val_dc_version_pretty_name{:d}' # attribute convention for other datasets
 
+# format should have (metric, ds, ref, other ds)
+_variable_pretty_name = {
+    0: "{}", 2: "{} of {} \n with {} as reference",
+    3: "{} of {} \n against {}, {}"
+}
 
 _colormaps = {  # from /qa4sm/validator/validation/graphics.py
     'R': _cclasses['div_better'],
@@ -117,13 +136,35 @@ _metric_value_ranges = {  # from /qa4sm/validator/validation/graphics.py
     'n_obs': [0, None],
     'urmsd': [0, None],
     'RSS': [0, None],
-    'mse': [0, None],  # mse only positive (https://en.wikipedia.org/wiki/Mean_squared_error)
-    'mse_corr': [0, None],  # mse_corr only positive
-    'mse_bias': [0, None],  # mse_bias only positive
-    'mse_var': [0, None],  # mse_var only positive
-    'snr': [None,None],  # mse_var only positive
-    'err_std': [None,None],  # mse_var only positive
-    'beta': [None,None],  # mse_var only positive
+    'mse': [0, None],
+    'mse_corr': [0, None],
+    'mse_bias': [0, None],
+    'mse_var': [0, None],
+    'snr': [None, None],
+    'err_std': [None, None],
+    'beta': [None, None],
+}
+
+# Value ranges for differences between metrics
+_diff_value_ranges = {  # from /qa4sm/validator/validation/graphics.py
+    'R': [-2, 2],
+    'p_R': [-1, 1],  # probability that observed corellation is statistical fluctuation
+    'rho': [-2, 2],
+    'p_rho': [-1, 1],
+    'tau': [-2, 2],
+    'p_tau': [-1, 1],
+    'RMSD': [None, None],
+    'BIAS': [None, None],
+    'n_obs': [None, None],
+    'urmsd': [None, None],
+    'RSS': [None, None],
+    'mse': [None, None],  # mse only positive (https://en.wikipedia.org/wiki/Mean_squared_error)
+    'mse_corr': [None, None],  # mse_corr only positive
+    'mse_bias': [None, None],  # mse_bias only positive
+    'mse_var': [None, None],  # mse_var only positive
+    'snr': [None, None],  # mse_var only positive
+    'err_std': [None, None],  # mse_var only positive
+    'beta': [None, None],  # mse_var only positive
 }
 
 # check if every metric has a colormap
@@ -154,17 +195,17 @@ _metric_description = {  # from /qa4sm/validator/validation/graphics.py
 
 # units for all datasets
 _metric_units = {  # from /qa4sm/validator/validation/graphics.py
-    'ISMN': r'm^3 m^{-3}',
-    'C3S': r'm^3 m^{-3}',
-    'GLDAS': r'm^3 m^{-3}',
+    'ISMN': r'm³/m³',
+    'C3S': r'm³/m³',
+    'GLDAS': r'm³/m³',
     'ASCAT': r'percentage of saturation',
-    'SMAP': r'm^3 m^{-3}',
-    'ERA5': r'm^3 m^{-3}',
-    'ERA5_LAND': r'm^3 m^{-3}',
+    'SMAP': r'm³/m³',
+    'ERA5': r'm³/m³',
+    'ERA5_LAND': r'm³/m³',
     'ESA_CCI_SM_active': r'percentage of saturation',
-    'ESA_CCI_SM_combined': r'm^3 m^{-3}',
-    'ESA_CCI_SM_passive': r'm^3 m^{-3}',
-    'SMOS': r'm^3 m^{-3}',
+    'ESA_CCI_SM_combined': r'm³/m³',
+    'ESA_CCI_SM_passive': r'm³/m³',
+    'SMOS': r'm³/m³',
 }
 
 # label name for all metrics

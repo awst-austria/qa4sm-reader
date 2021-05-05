@@ -6,14 +6,20 @@ from qa4sm_reader import globals
 import numpy as np
 import pandas as pd
 import os.path
+
+import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import matplotlib.gridspec as gridspec
+from matplotlib.patches import PathPatch
 from cartopy import config as cconfig
 import cartopy.feature as cfeature
 from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
-import warnings
 from pygeogrids.grids import BasicGrid, genreg_grid
+from shapely.geometry import Polygon
+
+import warnings
+
 cconfig['data_dir'] = os.path.join(os.path.dirname(__file__), 'cartopy')
 
 def _float_gcd(a, b, atol=1e-08):
@@ -47,6 +53,16 @@ def _value2index(a, a_min, da):
     "Return the indexes corresponding to a. a and the returned index is a numpy array."
     return ((a - a_min) / da).astype('int')
 
+def _format_floats(x):
+    """Format floats in the statistsics table"""
+    if isinstance(x, float):
+        if x > 0.09 or x < -0.09:
+            return np.format_float_positional(x, precision=2)
+        else:
+            return np.format_float_scientific(x, precision=2)
+    else:
+        return x
+
 def oversample(lon, lat, data, extent, dx, dy):
 
     other = BasicGrid(lon, lat)
@@ -59,7 +75,7 @@ def oversample(lon, lat, data, extent, dx, dy):
 
     return img.reshape(-1, reg_grid.shape[1]), reg_grid
 
-def geotraj_to_geo2d(df, var, index=globals.index_names, grid_stepsize=None):
+def geotraj_to_geo2d(df, index=globals.index_names, grid_stepsize=None):
     """
     Converts geotraj (list of lat, lon, value) to a regular grid over lon, lat.
     The values in df needs to be sampled from a regular grid, the order does not matter.
@@ -70,8 +86,6 @@ def geotraj_to_geo2d(df, var, index=globals.index_names, grid_stepsize=None):
     ----------
     df : pandas.DataFrame
         DataFrame containing 'lat', 'lon' and 'var' Series.
-    var : str
-        variable to be converted.
     index : tuple, optional
         Tuple containing the names of lattitude and longitude index. Usually ('lat','lon')
         The default is globals.index_names
@@ -91,13 +105,12 @@ def geotraj_to_geo2d(df, var, index=globals.index_names, grid_stepsize=None):
     """
     xx = df.index.get_level_values(index[1])  # lon
     yy = df.index.get_level_values(index[0])   # lat
-    data = df[var]
 
     if grid_stepsize not in ['nan', None]:
         x_min, x_max, dx, len_x = _get_grid_for_irregulars(xx, grid_stepsize)
         y_min, y_max, dy, len_y = _get_grid_for_irregulars(yy, grid_stepsize)
         data_extent = (x_min - dx/2, x_max + dx/2, y_min - dy/2, y_max + dy/2)
-        zz, grid = oversample(xx, yy, data.values, data_extent, dx, dy)
+        zz, grid = oversample(xx, yy, df.values, data_extent, dx, dy)
         origin = 'upper'
     else:
         x_min, x_max, dx, len_x = _get_grid(xx)
@@ -105,13 +118,13 @@ def geotraj_to_geo2d(df, var, index=globals.index_names, grid_stepsize=None):
         ii = _value2index(yy, y_min, dy)
         jj = _value2index(xx, x_min, dx)
         zz = np.full((len_y, len_x), np.nan, dtype=np.float64)
-        zz[ii, jj] = data
+        zz[ii, jj] = df
         data_extent = (x_min - dx / 2, x_max + dx / 2, y_min - dy / 2, y_max + dy / 2)
         origin = 'lower'
 
     return zz, data_extent, origin
 
-def get_value_range(ds, metric=None, force_quantile=False, quantiles=[0.025, 0.975]):
+def get_value_range(ds, metric=None, force_quantile=False, quantiles=[0.025, 0.975], type=None):
     """
     Get the value range (v_min, v_max) from globals._metric_value_ranges
     If the range is (None, None), a symmetric range around 0 is created,
@@ -141,10 +154,15 @@ def get_value_range(ds, metric=None, force_quantile=False, quantiles=[0.025, 0.9
     if metric == None:
         force_quantile = True
 
+    if not type == None and type == 'diff':
+        ranges = globals._diff_value_ranges
+    else:
+        ranges = globals._metric_value_ranges
+
     if not force_quantile:  # try to get range from globals
         try:
-            v_min = globals._metric_value_ranges[metric][0]
-            v_max = globals._metric_value_ranges[metric][1]
+            v_min = ranges[metric][0]
+            v_max = ranges[metric][1]
             if (v_min is None and v_max is None):  # get quantile range and make symmetric around 0.
                 v_min, v_max = get_quantiles(ds, quantiles)
                 v_max = max(abs(v_min), abs(v_max))  # make sure the range is symmetric around 0
@@ -161,7 +179,7 @@ def get_value_range(ds, metric=None, force_quantile=False, quantiles=[0.025, 0.9
                           'Could not get value range from globals._metric_value_ranges\n' + \
                           'Computing quantile range \'{}\' instead.\n'.format(str(quantiles)) +
                           'Known metrics are: \'' + \
-                          '\', \''.join([metric for metric in globals._metric_value_ranges]) + '\'')
+                          '\', \''.join([metric for metric in ranges]) + '\'')
 
     if force_quantile:  # get quantile range
         v_min, v_max = get_quantiles(ds, quantiles)
@@ -345,7 +363,7 @@ def style_map(ax, plot_extent, add_grid=True, map_resolution=globals.naturaleart
 
     return ax
 
-def make_watermark(fig, placement=globals.watermark_pos, for_map=False, offset=0.02):
+def make_watermark(fig, placement=globals.watermark_pos, for_map=False, offset=0.02): #todo: adjust space of watermark
     """
     Adds a watermark to fig and adjusts the current axis to make sure there
     is enough padding around the watermarks.
@@ -384,3 +402,396 @@ def make_watermark(fig, placement=globals.watermark_pos, for_map=False, offset=0
             fig.subplots_adjust(bottom=bottom + offset)  # defaults to rc when none!
     else:
         raise NotImplementedError
+
+
+def _make_cbar(fig, im, cax, ref_short:str, metric:str, label=None):
+    """
+    Make colorbar to use in plots
+
+    Parameters
+    ----------
+    fig: matplotlib.figure.Figure
+        figure of plot
+    im: AxesImage
+        from method Axes.imshow()
+    cax: axes.SubplotBase
+        from fig.add_subplot
+    ref_short: str
+        name of ref dataset
+    metric: str
+        name of metric
+    label: str
+        label to describe the colorbar
+    """
+    if label is None:
+        try:
+            label = globals._metric_name[metric] + \
+                    globals._metric_description[metric].format(
+                        globals._metric_units[ref_short])
+        except KeyError as e:
+            raise Exception('The metric \'{}\' or reference \'{}\' is not known.\n'.format(metric, ref_short) + str(e))
+
+    extend = get_extend_cbar(metric)
+    cbar = fig.colorbar(im, cax=cax, orientation='horizontal', extend=extend)
+    cbar.set_label(label, weight='normal')
+    cbar.outline.set_linewidth(0.4)
+    cbar.outline.set_edgecolor('black')
+    cbar.ax.tick_params(width=0.4)
+
+    return fig, im, cax
+
+def _adjust_box_widths(
+        fig,
+        widths=[1, 0.4]
+):
+    """
+    Adjust the withs of a seaborn-generated boxplot for boxplots with CIs. Adapted from:
+    https://stackoverflow.com/questions/56838187/how-to-create-spacing-between-same-subgroup-in-seaborn-boxplot
+
+    Parameters
+    ----------
+    fig: plt.Figure
+    widths: list
+        list with values of boxplot triplets widths (central width, CIs widths)
+    """
+    # iterating through Axes instances
+    for ax in fig.axes:
+        n = 0
+        # iterating through axes artists:
+        for c in ax.get_children():
+            # searching for PathPatches
+            if isinstance(c, PathPatch):
+                # different width whether it's the metric or the CIs
+                if n in np.arange(1, 100, 3):
+                    width = widths[0]
+                else:
+                    width = widths[1]
+                # getting current width of box:
+                p = c.get_path()
+                verts = p.vertices
+                verts_sub = verts[:-1]
+                xmin = np.min(verts_sub[:, 0])
+                xmax = np.max(verts_sub[:, 0])
+                xmid = 0.5*(xmin+xmax)
+                xhalf = 0.5*(xmax - xmin)
+                # setting new width of box
+                xmin_new = xmid - width*xhalf
+                xmax_new = xmid + width*xhalf
+                verts_sub[verts_sub[:, 0] == xmin, 0] = xmin_new
+                verts_sub[verts_sub[:, 0] == xmax, 0] = xmax_new
+
+                # setting new width of median line
+                for l in ax.lines:
+                    if np.all(l.get_xdata() == [xmin, xmax]):
+                        l.set_xdata([xmin_new, xmax_new])
+                n += 1
+
+def _CI_difference(fig, ax, ci):
+    """
+    Insert the median value of the upper and lower CI difference
+
+    Parameters
+    ----------
+    fig: matplotlib.figure.Figure
+        figure with CIs
+    ci: list
+        list of upper and lower ci dataframes
+    """
+    lower_pos = []
+    for ax in fig.axes:
+        n = 0
+        # iterating through axes artists:
+        for c in ax.get_children():
+            # searching for PathPatches
+            if isinstance(c, PathPatch):
+                # different width whether it's the metric or the CIs
+                if n in np.arange(0, 100, 3):
+                    # getting current width of box:
+                    p = c.get_path()
+                    verts = p.vertices
+                    verts_sub = verts[:-1]
+                    xmin = np.min(verts_sub[:, 0])
+                    lower_pos.append(xmin)
+                n += 1
+    for ci_df, xmin in zip(ci, lower_pos):
+        diff = ci_df["upper"] - ci_df["lower"]
+        ci_range = float(diff.mean())
+        ypos = float(ci_df["lower"].min())
+        ax.annotate("Mean CI\nRange:\n {:.2g}".format(ci_range),
+                    xy = (xmin - 0.2, ypos),
+                    horizontalalignment="center")
+
+def boxplot(
+        df,
+        ci=None,
+        label=None,
+        figsize=None,
+        dpi=100,
+        **kwargs
+):
+    """
+    Create a boxplot_basic from the variables in df.
+    The box shows the quartiles of the dataset while the whiskers extend
+    to show the rest of the distribution, except for points that are
+    determined to be “outliers” using a method that is a function of
+    the inter-quartile range.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        DataFrame containing 'lat', 'lon' and (multiple) 'var' Series.
+    ci: list
+        list of Dataframes containing "upper" and "lower" CIs
+    label : str, optional
+        Label of the y axis, describing the metric. If None, a label is autogenerated from metadata.
+        The default is None.
+    figsize : tuple, optional
+        Figure size in inches. The default is globals.map_figsize.
+    dpi : int, optional
+        Resolution for raster graphic output. The default is globals.dpi.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        the boxplot
+    ax : matplotlib.axes.Axes
+    """
+    values = df.copy()
+    # make plot
+    sns.set_style("whitegrid")
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+    # changes necessary to have confidence intervals in the plot
+    if ci: # todo: create overlapping plots rather than doing all with seaborn
+        # iterate the variables (by caption) and linearize the dataframe
+        to_concat = []
+        for Var, intervals in zip(df, ci):
+            display_order = []
+            var_values = df[Var].to_frame("values")
+            var_values["caption"] = Var
+            var_values["type"] = "Metric values"
+            display_order.insert(1, var_values)
+            # collect the upper/lower bound of CIs
+            for bound in intervals:
+                if bound == "upper":
+                    type, pos = "Upper CI", 2
+                elif bound == "lower":
+                    type, pos = "Lower CI", 0
+                int_values = intervals[bound].rename("values")
+                int_values = int_values.to_frame()
+                int_values["caption"] = Var
+                int_values["type"] = type
+                display_order.insert(pos, int_values)
+            to_concat.extend(display_order)
+        # create df with columns "values", "caption", "type"
+        df = pd.concat(to_concat, axis=0)
+        # add the kwywords to plot in triplets
+        triples = {
+            "x": "caption",
+            "y": "values",
+            "hue": "type",
+            "palette": (
+                "skyblue",
+                "white",
+                "tomato"
+            )
+        }
+        if kwargs:
+            kwargs.update(triples)
+        else:
+            kwargs = triples
+    # create plot
+    ax = sns.boxplot(
+        data=df,
+        ax=ax,
+        showfliers=False,
+        color='white',
+        width=0.15,
+        **kwargs
+    )
+    # improve boxplot appearence
+    ax.set(xticklabels=values.columns)
+    sns.despine()  # remove ugly spines (=border around plot) right and top.
+    if ci:
+        plt.setp(ax.artists, alpha=.7)
+        #_CI_difference(fig, ax, ci)
+        _adjust_box_widths(fig)
+        ax.legend(bbox_to_anchor=(1, 1), fontsize=8)
+        ax.legend_.set_title(None)
+        ax.set(xlabel=None)
+    # provide y label
+    if label is not None:
+        ax.set_ylabel(label, weight='normal')
+
+    return fig, ax
+
+def mapplot(
+        df, metric,
+        ref_short,
+        ref_grid_stepsize=None,
+        plot_extent=None,
+        colormap=None,
+        projection=None,
+        add_cbar=True,
+        label=None,
+        figsize=globals.map_figsize,
+        dpi=globals.dpi,
+        diff_range=None,
+        **style_kwargs
+):
+        """
+        Create an overview map from df using values as color. Plots a scatterplot for ISMN and an image plot for other
+        input values.
+
+        Parameters
+        ----------
+        df : pandas.Series
+            values to be plotted. Generally from metric_df[Var]
+        metric: str
+            name of the metric for the plot
+        ref_short: str
+                short_name of the reference dataset (read from netCDF file)
+        ref_grid_stepsize: float or None, optional (None by default)
+                angular grid stepsize, needed only when ref_is_angular == False,
+        plot_extent: tuple
+                (x_min, x_max, y_min, y_max) in Data coordinates. The default is None.
+        colormap:  Colormap, optional
+                colormap to be used.
+                If None, defaults to globals._colormaps.
+        projection:  cartopy.crs, optional
+                Projection to be used. If none, defaults to globals.map_projection.
+                The default is None.
+        add_cbar: bool, optional
+                Add a colorbar. The default is True.
+        label : str, optional
+            Label of the y axis, describing the metric. If None, a label is autogenerated from metadata.
+            The default is None.
+        figsize: tuple, optional
+            Figure size in inches. The default is globals.map_figsize.
+        dpi: int, optional
+            Resolution for raster graphic output. The default is globals.dpi.
+        diff_range: None, 'adjusted' or 'fixed'
+            if none, globals._metric_value_ranges is used to define the bar extent; if 'fixed', globals._diff_value_ranges
+            is used instead; if 'adjusted', max and minimum values are used
+        **style_kwargs :
+            Keyword arguments for plotter.style_map().
+
+        Returns
+        -------
+        fig : matplotlib.figure.Figure
+            the boxplot
+        ax : matplotlib.axes.Axes
+        """
+        v_min, v_max = get_value_range(df, metric)  # range of values
+        if diff_range and diff_range == 'adjusted':
+            v_min, v_max = get_value_range(df, metric=None)
+        elif diff_range and diff_range == 'fixed':
+            v_min, v_max = get_value_range(df, metric, type='diff')
+
+        # initialize plot
+        fig, ax, cax = init_plot(figsize, dpi, add_cbar, projection)
+        if not colormap:
+            cmap = globals._colormaps[metric]
+        else:
+            cmap = colormap
+
+        # scatter point or mapplot
+        if ref_short in globals.scattered_datasets:  # scatter
+            if not plot_extent:
+                plot_extent = get_plot_extent(df)
+
+            markersize = globals.markersize ** 2
+            lat, lon = globals.index_names
+            im = ax.scatter(df.index.get_level_values(lon),
+                            df.index.get_level_values(lat),
+                            c=df, cmap=cmap, s=markersize,
+                            vmin=v_min, vmax=v_max,
+                            edgecolors='black', linewidths=0.1,
+                            zorder=2, transform=globals.data_crs)
+        else:  # mapplot
+            if not plot_extent:
+                plot_extent = get_plot_extent(df, grid_stepsize=ref_grid_stepsize, grid=True)
+            zz, zz_extent, origin = geotraj_to_geo2d(df, grid_stepsize=ref_grid_stepsize)  # prep values
+            im = ax.imshow(zz, cmap=cmap, vmin=v_min,
+                           vmax=v_max, interpolation='nearest',
+                           origin=origin, extent=zz_extent,
+                           transform=globals.data_crs, zorder=2)
+
+        if add_cbar:  # colorbar
+            _make_cbar(fig, im, cax, ref_short, metric, label=label)
+        style_map(ax, plot_extent, **style_kwargs)
+        fig.canvas.draw()  # very slow. necessary bcs of a bug in cartopy: https://github.com/SciTools/cartopy/issues/1207
+
+        return fig, ax
+
+def diff_plot(df:pd.DataFrame, **kwargs):
+    """
+    Create a Bland Altman plot for a Dataframe and a list of other Dataframes. Difference is other - reference.
+
+    Parameters
+    ----------
+    ref_df : pd.DataFrame
+        Dataframe of the reference values
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        the boxplot
+    ax : matplotlib.axes.Axes
+    """
+    fig, ax = plt.subplots(figsize=(16,10))
+
+    mean = "Mean with {}".format(df.columns[0])
+    diff = "Difference with {}".format(df.columns[0])
+
+    df[diff] = df.iloc[:,1] - df.iloc[:,0]
+    df[mean] = np.mean(df, axis=1)
+    md = np.mean(df[diff])
+    sd = np.std(df[diff])
+    ax = sns.scatterplot(x=df[mean], y=df[diff], **kwargs)
+    # mean line
+    ax.axhline(md, linestyle='-', label="Mean difference with {}".format(df.columns[1]))
+    # higher STD bound
+    ax.axhline(md + 1.96*sd, linestyle='--', label="Standard intervals")
+    # lower STD bound
+    ax.axhline(md - 1.96*sd, linestyle='--')
+
+    plt.legend()
+
+    return fig, ax
+
+def plot_spatial_extent(polys:dict, output:str=None, title:str=None):
+    """
+    Plots the given Polygons on a map.
+
+    Parameters
+    ----------
+    polys : dict
+        dictionary with shape {name: shapely.geometry.Polygon}
+    title : str
+        plot title
+    """
+    fig, ax, cax = init_plot(figsize=globals.map_figsize, dpi=globals.dpi)
+    for n, items in enumerate(polys.items()):
+        name, Pol = items
+        if n == 0:
+            union = Pol
+        union = union.union(Pol)  # get maximum extent
+        try:
+            x, y = Pol.exterior.xy
+            if name == output:
+                style = {'color':'powderblue', 'alpha':0.4}
+                ax.fill(x, y, label=name, **style, zorder=5)
+                continue
+            ax.plot(x, y, label=name)
+        except:
+            pass
+
+    plt.legend(loc='upper right')
+    ax.set_title(title)
+    # provide extent of plot
+    d_lon = abs(union.bounds[0] - union.bounds[2])* 1/8
+    d_lat = abs(union.bounds[1] - union.bounds[3])* 1/8
+    plot_extent = (union.bounds[0] - d_lon, union.bounds[2] + d_lon,
+                   union.bounds[1] - d_lat, union.bounds[3] + d_lat)
+
+    style_map(ax, plot_extent)
