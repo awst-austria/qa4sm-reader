@@ -9,7 +9,13 @@ import warnings
 import numpy as np
 import xarray as xr
 import pandas as pd
+from dask import dataframe
 from typing import Union
+
+
+class SpatialExtentError(Exception):
+    """Class to handle errors derived from the spatial extent of validations"""
+    pass
 
 
 def extract_periods(filepath) -> np.array:
@@ -22,22 +28,35 @@ def extract_periods(filepath) -> np.array:
         return np.array([None])
 
 
-class SpatialExtentError(Exception):
-    """Class to handle errors derived from the spatial extent of validations"""
-    pass
+class MixinImg:
+    """Mixin class for QA4SMImg and QA4SMImgHires"""
+
+    def _get_extent(self, extent) -> tuple:
+        """Get extent of the results from the netCDF file"""
+        if not extent:
+            lat, lon, gpi = globals.index_names
+            lat_coord, lon_coord = self.ds[lat].values, self.ds[lon].values
+            lons = min(lon_coord), max(lon_coord)
+            lats = min(lat_coord), max(lat_coord)
+            extent = lons + lats
+
+        return extent
 
 
-class QA4SMImg(object):
+class QA4SMImg(MixinImg):
     """A tool to analyze the results of a validation, which are stored in a netCDF file."""
-    def __init__(self, filepath,
-                 period=None,
-                 extent=None,
-                 ignore_empty=True,
-                 metrics=None,
-                 index_names=globals.index_names,
-                 load_data=True,
-                 empty=False,
-                 engine='h5netcdf'):
+
+    def __init__(
+            self, filepath,
+            period=None,
+            extent=None,
+            ignore_empty=True,
+            metrics=None,
+            index_names=globals.index_names,
+            load_data=True,
+            empty=False,
+            engine='h5netcdf',
+    ):
         """
         Initialise a common QA4SM results image.
 
@@ -59,14 +78,19 @@ class QA4SMImg(object):
             Names of dimension variables in x and y direction (lat, lon).
         load_data: bool, default is True
             if true, initialize all the datasets, variables and metadata
-        engine: str, optional (default: h5netcdf)
+        engine: str, optional (default: 'netcdf4')
             Engine used by xarray to read data from file.
         """
         self.filepath = Path(filepath)
         self.index_names = index_names
 
         self.ignore_empty = ignore_empty
-        self.ds = self._open_ds(extent=extent, period=period, engine=engine)
+
+        self.ds = self._open_ds(
+            extent=extent,
+            period=period,
+            engine=engine,
+        )
         self.extent = self._get_extent(extent=extent)  # get extent from .nc file if not specified
         self.datasets = hdl.QA4SMDatasets(self.ds.attrs)
 
@@ -82,7 +106,7 @@ class QA4SMImg(object):
             except AttributeError:
                 self.ref_dataset_grid_stepsize = 'nan'
 
-    def _open_ds(self, extent=None, period=None, engine='h5netcdf'):
+    def _open_ds(self, extent=None, period=None, engine='netcdf4'):
         """Open .nc as xarray datset, with selected extent"""
         dataset = xr.load_dataset(
             self.filepath,
@@ -99,7 +123,7 @@ class QA4SMImg(object):
         # geographical subset of the results
         if extent:
             lat, lon, gpi = globals.index_names
-            mask = (ds[lon] >= extent[0]) & (ds[lon] <= extent[1]) &\
+            mask = (ds[lon] >= extent[0]) & (ds[lon] <= extent[1]) & \
                    (ds[lat] >= extent[2]) & (ds[lat] <= extent[3])
 
             if True not in mask:
@@ -142,7 +166,9 @@ class QA4SMImg(object):
         if all(type in metadata.keys() for type in globals.soil_types):
             soil_dict = {type: metadata[type] for type in globals.soil_types}
             soil_combined = combine_soils(soil_dict)
-            metadata["soil_type"] = hdl.QA4SMVariable("soil_type", self.ds.attrs, values=soil_combined).initialize()
+            metadata["soil_type"] = hdl.QA4SMVariable(
+                "soil_type", self.ds.attrs, values=soil_combined
+            ).initialize()
 
         else:
             warnings.warn(
@@ -152,7 +178,9 @@ class QA4SMImg(object):
         if all(type in metadata.keys() for type in globals.instrument_depths):
             depth_dict = {type: metadata[type] for type in globals.instrument_depths}
             depth_combined = combine_depths(depth_dict)
-            metadata["instrument_depth"] = hdl.QA4SMVariable("instrument_depth", self.ds.attrs, values=depth_combined).initialize()
+            metadata["instrument_depth"] = hdl.QA4SMVariable(
+                "instrument_depth", self.ds.attrs, values=depth_combined
+            ).initialize()
 
         else:
             warnings.warn(
@@ -160,17 +188,6 @@ class QA4SMImg(object):
             )
 
         return metadata
-
-    def _get_extent(self, extent) -> tuple:
-        """Get extent of the results from the netCDF file"""
-        if not extent:
-            lat, lon, gpi = globals.index_names
-            lat_coord, lon_coord = self.ds[lat].values, self.ds[lon].values
-            lons = min(lon_coord), max(lon_coord)
-            lats = min(lat_coord), max(lat_coord)
-            extent = lons + lats
-
-        return extent
 
     def _load_vars(self, empty=False, only_metrics=False) -> list:
         """
@@ -188,25 +205,21 @@ class QA4SMImg(object):
         vars : list
             list of QA4SMVariable objects for the validation variables
         """
-        vars = []
+        varslist = []
         for varname in self.varnames:
             if empty:
                 values = None
             else:
-                # lat, lon are in varnames but not in datasframe (as they are the index)
-                try:
-                    values = self.df[[varname]]
-                except KeyError:
-                    values = None
+                values = self.df.loc[:, varname]
 
             Var = hdl.QA4SMVariable(varname, self.ds.attrs, values=values).initialize()
 
             if only_metrics and isinstance(Var, hdl.MetricVariable):
-                vars.append(Var)
+                varslist.append(Var)
             elif not only_metrics:
-                vars.append(Var)
+                varslist.append(Var)
 
-        return vars
+        return varslist
 
     def _load_metrics(self) -> dict:
         """
@@ -225,13 +238,13 @@ class QA4SMImg(object):
                 for Var in self._iter_vars(filter_parms={'metric': metric}):
                     metric_vars.append(Var)
 
-                if metric_vars != []:
+                if metric_vars:
                     Metric = hdl.QA4SMMetric(metric, metric_vars)
                     Metrics[metric] = Metric
 
         return Metrics
 
-    def _iter_vars(self, type:str=None, name:str=None, filter_parms:dict=None) -> iter:
+    def _iter_vars(self, type: str = None, name: str = None, filter_parms: dict = None) -> iter:
         """
         Iter through QA4SMVariable objects that are in the file
 
@@ -256,8 +269,9 @@ class QA4SMImg(object):
                     break
                 else:
                     continue
-            if type and not isinstance(Var, type_lut[type]):
-                    continue
+
+            if type is not None and not isinstance(Var, type_lut[type]):
+                continue
             if filter_parms:
                 for key, val in filter_parms.items():
                     if getattr(Var, key) == val:  # check all attribute individually
@@ -265,7 +279,7 @@ class QA4SMImg(object):
                     else:
                         check = False  # does not match requirements
                         break
-                if check != True:
+                if not check:
                     continue
 
             yield Var
@@ -284,7 +298,7 @@ class QA4SMImg(object):
                 if val is None or getattr(Metric, key) == val:
                     yield Metric
 
-    def group_vars(self, filter_parms:dict):
+    def group_vars(self, filter_parms: dict):
         """
         Return a list of QA4SMVariable that match filters
 
@@ -299,7 +313,7 @@ class QA4SMImg(object):
 
         return vars
 
-    def group_metrics(self, metrics:list=None) -> (dict, dict, dict):
+    def group_metrics(self, metrics: list = None) -> (dict, dict, dict):
         """
         Load and group all metrics from file
 
@@ -308,7 +322,7 @@ class QA4SMImg(object):
         metrics: list or None
             if list, only metrics in the list are grouped
         """
-        common, double, triple = {},{},{}
+        common, double, triple = {}, {}, {}
 
         # fetch Metrics
         if metrics is None:
@@ -326,7 +340,7 @@ class QA4SMImg(object):
 
         return common, double, triple
 
-    def _ds2df(self, varnames:list=None) -> pd.DataFrame:
+    def _ds2df(self, varnames: list = None) -> pd.DataFrame:
         """
         Return one or more or all variables in a single DataFrame.
 
@@ -344,13 +358,15 @@ class QA4SMImg(object):
             if varnames is None:
                 if globals.time_name in self.varnames:
                     if self.ds[globals.time_name].values.size == 0:
-                         self.ds = self.ds.drop_vars(globals.time_name)
+                        self.ds = self.ds.drop_vars(globals.time_name)
                 df = self.ds.to_dataframe()
             else:
                 df = self.ds[self.index_names + varnames].to_dataframe()
                 df.dropna(axis='index', subset=varnames, inplace=True)
         except KeyError as e:
-            raise Exception("The variable name '{}' does not match any name in the input values.".format(e.args[0]))
+            raise Exception(
+                f"The variable name '{e.args[0]}' does not match any name in the input values."
+            )
 
         if isinstance(df.index, pd.MultiIndex):
             lat, lon, gpi = globals.index_names
@@ -360,12 +376,12 @@ class QA4SMImg(object):
             if gpi in df.index:
                 df[gpi] = df.index.get_level_values(gpi)
 
-        df.reset_index(drop=True, inplace=True)
+        df = df.reset_index(drop=True)
         df = df.set_index(self.index_names)
 
         return df
 
-    def metric_df(self, metrics:str or list):
+    def metric_df(self, metrics: str or list):
         """
         Group all variables for the metric in a common data frame
 
@@ -383,16 +399,16 @@ class QA4SMImg(object):
         if isinstance(metrics, list):
             Vars = []
             for metric in metrics:
-                Vars.extend(self.group_vars(filter_parms={'metric':metric}))
+                Vars.extend(self.group_vars(filter_parms={'metric': metric}))
         else:
-            Vars = self.group_vars(filter_parms={'metric':metrics})
+            Vars = self.group_vars(filter_parms={'metric': metrics})
 
         varnames = [Var.varname for Var in Vars]
         metrics_df = self._ds2df(varnames=varnames)
 
         return metrics_df
 
-    def get_cis(self, Var:hdl.MetricVariable) -> Union[list, None]:
+    def get_cis(self, Var: hdl.MetricVariable) -> Union[list, None]:
         """Return the CIs of a variable as a list of dfs ('upper' and 'lower'), if they exist in the netcdf"""
         cis = []
         if not self.has_CIs:
@@ -400,9 +416,9 @@ class QA4SMImg(object):
         for ci in self._iter_vars(
                 type="ci",
                 filter_parms={
-                    "metric":Var.metric,
-                    "metric_ds":Var.metric_ds,
-                    "other_ds":Var.other_ds,
+                    "metric": Var.metric,
+                    "metric_ds": Var.metric_ds,
+                    "other_ds": Var.other_ds,
                 }
         ):
             values = ci.values
@@ -411,7 +427,7 @@ class QA4SMImg(object):
 
         return cis
 
-    def _metric_stats(self, metric, id=None)  -> list:
+    def _metric_stats(self, metric, id=None) -> list:
         """
         Provide a list with the metric summary statistics for each variable or for all variables
         where the dataset with id=id is the metric dataset.
@@ -429,7 +445,7 @@ class QA4SMImg(object):
             List of (variable) lists with summary statistics
         """
         metric_stats = []
-        filters = {'metric':metric}
+        filters = {'metric': metric}
         if id:
             filters.update(id=id)
         # get stats by metric
@@ -439,7 +455,7 @@ class QA4SMImg(object):
             # take out variables with all NaN or NaNf
             if values.isnull().values.all():
                 continue
-            iqr = values.quantile(q=[0.75,0.25]).diff()
+            iqr = values.quantile(q=[0.75, 0.25]).diff()
             iqr = abs(float(iqr.loc[0.25]))
             # find the statistics for the metric variable
             var_stats = [i for i in (values.mean(), values.median(), iqr)]
@@ -465,7 +481,7 @@ class QA4SMImg(object):
             metric_stats.append(var_stats)
 
         return metric_stats
-    
+
     def stats_df(self) -> pd.DataFrame:
         """
         Create a DataFrame with summary statistics for all the metrics
@@ -494,3 +510,79 @@ class QA4SMImg(object):
 
         return stats_df
 
+
+class QA4SMImgHires(MixinImg):
+    """
+    A streamlined version of QA4SMImg to deal with very large validation files
+
+    Parameters
+    ----------
+    chunk_size: int, optional. Default is -1
+        If provided, it is used to load the dataset into dask arrays
+        of size equal to 'chunk_size'. Use chuck_size -1 to load
+        the dataset with Dask using a single chunk for all arrays.
+    """
+
+    def __init__(
+            self, filepath,
+            extent=None,
+            load_data=True,
+            engine="netcdf4",
+            chunk_size=-1,
+    ):
+        self.filepath = filepath
+        self.ds = self._open_ds(
+            engine=engine,
+            chunk_size=chunk_size,
+        )
+        self.extent = self._get_extent(extent=extent)  # get extent from .nc file if not specified
+        self.datasets = hdl.QA4SMDatasets(self.ds.attrs)
+        self.varnames = list(self.ds.variables.keys())
+
+        if load_data:
+            self.df = self._ds2dask_dataframe()
+
+            # this try here is to obey tests, withouth a necessity of changing and commiting test files again
+            try:
+                self.ref_dataset_grid_stepsize = self.ds.val_dc_dataset0_grid_stepsize
+            except AttributeError:
+                self.ref_dataset_grid_stepsize = 'nan'
+
+    def _open_ds(self, engine="netcdf4", chunk_size=-1) -> xr.Dataset:
+        try:
+            dataset = xr.open_dataset(
+                self.filepath,
+                drop_variables="time",
+                engine=engine,
+                chunks={"loc": chunk_size}
+            )
+        except IOError:
+            warnings.warn(
+                f"The selected engine '{engine}' is not compatible with opening"
+                "the dataset in chunks with Dask. 'netcdf4' will be used as engine!"
+            )
+            dataset = xr.open_dataset(
+                self.filepath,
+                drop_variables="time",
+                engine="netcdf4",
+                chunks={"loc": chunk_size}
+            )
+
+        return dataset
+
+    def _ds2dask_dataframe(self):
+        """Get a dask.dataframe of the dataset variables"""
+        dask_series = []
+        for varname in self.ds.variables:
+            ser = dataframe.from_dask_array(self.ds[varname].data)
+            ser.name = varname
+            dask_series.append(ser)
+
+        df = dataframe.concat(dask_series, axis=1)
+
+        return df
+
+
+im = QA4SMImgHires(
+    "/home/pstradio/Projects_data/QA4SM/Validations/0-ISMN.soil_moisture_with_1-ESA_CCI_SM_active.sm.nc",
+)
