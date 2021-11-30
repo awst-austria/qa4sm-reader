@@ -7,7 +7,7 @@ from typing import Union
 import numpy as np
 import matplotlib.pyplot as plt
 
-from qa4sm_reader.img import QA4SMImg
+from qa4sm_reader.img import QA4SMImg, QA4SMImgHires
 import qa4sm_reader.globals as globals
 from qa4sm_reader import plotting_methods as plm
 
@@ -942,3 +942,197 @@ class QA4SMPlotter():
         table.to_csv(path_or_buf=filepath)
 
         return filepath
+
+
+class QA4SMPlotterHires(QA4SMPlotter):
+    """Adapted plotter to deal with very large validations using Dask"""
+    def __init__(
+            self,
+            image,
+            out_dir: str = None
+    ):
+        super().__init__(image=image, out_dir=out_dir)
+        self.img = image
+
+    def _yield_values(
+        self,
+        metric: str,
+        tc: bool = False,
+        stats: bool = True,
+        mean_ci: bool = True,
+    ) -> tuple:
+        """
+        Get iterable with pandas dataframes for all variables of a metric to plot
+
+        Parameters
+        ----------
+        metric: str
+            metric name
+        tc: bool, default is False
+            True if TC. Then, caption starts with "Other Data:"
+        stats: bool
+            If true, append the statistics to the caption
+        mean_ci: bool
+            If True, 'Mean CI: {value}' is added to the caption
+
+        Yield
+        -----
+        df: pd.DataFrame
+            dataframe with variable values and caption name
+        Var: QA4SMMetricVariable
+            variable corresponding to the dataframe
+        ci: pd.DataFrame
+            dataframe with "upper" and "lower" CI
+        """
+        Vars = self.img._iter_vars(
+            type="metric",
+            filter_parms={"metric": metric}
+        )
+
+        for n, Var in enumerate(Vars):
+            values = Var.values[Var.varname].compute()
+            # changes if it's a common-type Var
+            if Var.g == 0:
+                box_cap_ds = 'All datasets'
+            else:
+                box_cap_ds = self._box_caption(Var, tc=tc)
+            # setting in global for caption stats
+            if globals.boxplot_printnumbers:
+                box_cap = '{}'.format(box_cap_ds)
+                if stats:
+                    box_stats = plm._box_stats(values)
+                    box_cap = box_cap + "\n{}".format(box_stats)
+            else:
+                box_cap = box_cap_ds
+            df = values.to_frame(box_cap)
+
+            ci = self.img.get_cis(Var)
+            # could be that variable doesn't have CIs - empty list
+            if ci:
+                ci = [dask_df.compute() for dask_df in ci]
+                ci = pd.concat(ci, axis=1)
+                label = ""
+                if mean_ci:
+                    # get the mean CI range
+                    diff = ci["upper"] - ci["lower"]
+                    ci_range = float(diff.mean())
+                    label = "\nMean CI range: {:.3g}".format(ci_range)
+                df.columns = [
+                    df.columns[0] + label
+                ]
+            else:
+                ci = None
+            # values are all Nan or NaNf - not plotted
+            df_arr = df.to_numpy()
+            if np.isnan(df_arr).all() or df_arr.size == 0:
+                continue
+
+            yield df, Var, ci
+
+    def mapplot_metric(
+            self, metric: str,
+            out_types: str = 'png',
+            save_files: bool = False,
+            **plotting_kwargs
+    ) -> list:
+        """
+        Mapplot for all variables for a given metric in the loaded file.
+
+        Parameters
+        ----------
+        metric : str
+            Name of a metric. File is searched for variables for that metric.
+        out_types: str or list
+            extensions which the files should be saved in
+        save_files: bool, optional. Default is False
+            wether to save the file in the output directory
+        plotting_kwargs: arguments for mapplot function
+
+        Returns
+        -------
+        fnames : list
+            List of files that were created
+        """
+        fnames = []
+        for Var in self.img._iter_vars(type="metric", filter_parms={"metric": metric}):
+            if not (np.isnan(Var.values.compute().to_numpy()).all() or Var.is_CI):
+                fns = self.mapplot_var(Var,
+                                       out_name=None,
+                                       out_types=out_types,
+                                       save_files=save_files,
+                                       **plotting_kwargs)
+            # values are all Nan or NaNf - not plotted
+            else:
+                continue
+            if save_files:
+                fnames.extend(fns)
+                plt.close('all')
+
+        if fnames:
+            return fnames
+
+    def mapplot_var(
+            self, Var,
+            out_name: str = None,
+            out_types: str = 'png',
+            save_files: bool = False,
+            **plotting_kwargs
+    ) -> list:
+        """
+        Plots values to a map, using the values as color. Plots a scatterplot for
+        ISMN and a image plot for other input values.
+
+        Parameters
+        ----------
+        Var : QA4SMMetricVariab;e
+            Var in the image to make the map for.
+        out_name: str
+            name of output file
+        out_types: str or list
+            extensions which the files should be saved in
+        save_files: bool, optional. Default is False
+            wether to save the file in the output directory
+        plotting_kwargs: arguments for mapplot function
+
+        Returns
+        -------
+        fnames: list
+            list of file names with all the extensions
+        """
+        ref_meta, mds_meta, other_meta = Var.get_varmeta()
+        metric = Var.metric
+        ref_grid_stepsize = self.img.ref_dataset_grid_stepsize
+        # create mapplot
+        df = self.img.compute_values(Var.values)
+
+        fig, ax = plm.mapplot(df=df[Var.varname],
+                              metric=metric,
+                              ref_short=ref_meta[1]['short_name'],
+                              ref_grid_stepsize=ref_grid_stepsize,
+                              plot_extent=None,  # if None, extent is sutomatically adjusted (as opposed to img.extent)
+                              **plotting_kwargs)
+
+        # title and plot settings depend on the metric group
+        if Var.g == 0:
+            title = "{} between all datasets".format(globals._metric_name[metric])
+            out_name = self.create_filename(Var, type='mapplot_common')
+        elif Var.g == 2:
+            title = self.create_title(Var=Var, type='mapplot_basic')
+            out_name = self.create_filename(Var, type='mapplot_double')
+        else:
+            title = self.create_title(Var=Var, type='mapplot_tc')
+            out_name = self.create_filename(Var, type='mapplot_tc')
+
+        # use title for plot, make watermark
+        ax.set_title(title, pad=globals.title_pad)
+        if globals.watermark_pos not in [None, False]:
+            plm.make_watermark(fig, globals.watermark_pos, for_map=True, offset=0.04)
+
+        # save file or just return the image
+        if save_files:
+            fnames = self._save_plot(out_name, out_types=out_types)
+
+            return fnames
+
+        else:
+            return fig, ax

@@ -31,6 +31,23 @@ def extract_periods(filepath) -> np.array:
 class MixinImg:
     """Mixin class for QA4SMImg and QA4SMImgHires"""
 
+    @property
+    def has_CIs(self):
+        """True if the validation result contains confidence intervals"""
+        itdoes = hdl.ConfidenceInterval in [type(var) for var in self.vars]
+
+        return itdoes
+
+    @property
+    def name(self) -> str:
+        """Create a unique name for the QA4SMImage from the netCDF file"""
+        ref = self.datasets.ref['pretty_title']
+        others = [other['pretty_title'] for other in self.datasets.others]
+
+        name = ",\n".join(others) + "\nv {} (ref)".format(ref)
+
+        return name
+
     def _get_extent(self, extent) -> tuple:
         """Get extent of the results from the netCDF file"""
         if not extent:
@@ -41,6 +58,181 @@ class MixinImg:
             extent = lons + lats
 
         return extent
+
+    def _load_vars(self, empty=False, only_metrics=False) -> list:
+        """
+        Create a list of common variables and fill each with values
+
+        Parameters
+        ----------
+        empty : bool, default is False
+            if True, Var.values is an empty dataframe
+        only_metrics : bool, default is False
+            if True, only variables for metric scores are kept (i.e. not gpi, idx ...)
+
+        Returns
+        -------
+        vars : list
+            list of QA4SMVariable objects for the validation variables
+        """
+        varslist = []
+        for varname in self.varnames:
+            if empty:
+                values = None
+            else:
+                # lat, lon are in varnames but not in datasframe (as they are the index)
+                try:
+                    values = self.df[[varname]]
+                except KeyError:
+                    values = None
+
+            Var = hdl.QA4SMVariable(varname, self.ds.attrs, values=values).initialize()
+
+            if only_metrics and isinstance(Var, hdl.MetricVariable):
+                varslist.append(Var)
+            elif not only_metrics:
+                varslist.append(Var)
+
+        return varslist
+
+    def _iter_vars(self, type: str = None, name: str = None, filter_parms: dict = None) -> iter:
+        """
+        Iter through QA4SMVariable objects that are in the file
+
+        Parameters
+        ----------
+        type : str
+            One of 'metric', 'ci', 'metadata' can be specified to only iterate through the specific group
+        name : str, default is None
+            yield a specific variable by its name
+        filter_parms : dict
+            dictionary with QA4SMVariable attributes as keys and filter value as values (e.g. {g: 0})
+        """
+        type_lut = {
+            "metric": hdl.MetricVariable,
+            "ci": hdl.ConfidenceInterval,
+            "metadata": hdl.Metadata,
+        }
+        for Var in self.vars:
+            if name:
+                if name in [Var.varname, Var.pretty_name]:
+                    yield Var
+                    break
+                else:
+                    continue
+
+            if type is not None and not isinstance(Var, type_lut[type]):
+                continue
+
+            if filter_parms:
+                for key, val in filter_parms.items():
+                    if getattr(Var, key) == val:  # check all attribute individually
+                        check = True
+                    else:
+                        check = False  # does not match requirements
+                        break
+                if not check:
+                    continue
+
+            yield Var
+
+    def _load_metrics(self) -> dict:
+        """
+        Create a list of metrics for the file
+
+        Returns
+        -------
+        Metrics : dict
+            dictionary with shape {metric name: QA4SMMetric}
+        """
+        Metrics = {}
+        all_groups = globals.metric_groups.values()
+        for group in all_groups:
+            for metric in group:
+                metric_vars = []
+                for Var in self._iter_vars(filter_parms={'metric': metric}):
+                    metric_vars.append(Var)
+
+                if metric_vars:
+                    Metric = hdl.QA4SMMetric(metric, metric_vars)
+                    Metrics[metric] = Metric
+
+        return Metrics
+
+    def group_metrics(self, metrics: list = None) -> (dict, dict, dict):
+        """
+        Load and group all metrics from file
+
+        Parameters
+        ----------
+        metrics: list or None
+            if list, only metrics in the list are grouped
+        """
+        common, double, triple = {}, {}, {}
+
+        # fetch Metrics
+        if metrics is None:
+            metrics = self.metrics.keys()
+
+        # fill dictionaries
+        for metric in metrics:
+            Metric = self.metrics[metric]
+            if Metric.g == 0:
+                common[metric] = Metric
+            elif Metric.g == 2:
+                double[metric] = Metric
+            elif Metric.g == 3:
+                triple[metric] = Metric
+
+        return common, double, triple
+
+    def _iter_metrics(self, **filter_parms) -> iter:
+        """
+        Iter through QA4SMMetric objects that are in the file
+
+        Parameters
+        ----------
+        **filter_parms : kwargs, dict
+            dictionary with QA4SMMetric attributes as keys and filter value as values (e.g. {g: 0})
+        """
+        for Metric in self.metrics.values():
+            for key, val in filter_parms.items():
+                if val is None or getattr(Metric, key) == val:
+                    yield Metric
+
+    def group_vars(self, filter_parms: dict):
+        """
+        Return a list of QA4SMVariable that match filters
+
+        Parameters
+        ----------
+        **filter_parms : kwargs, dict
+            dictionary with QA4SMVariable attributes as keys and filter value as values (e.g. {g: 0})
+        """
+        vars = []
+        for Var in self._iter_vars(filter_parms=filter_parms):
+            vars.append(Var)
+
+        return vars
+
+    def get_cis(self, Var: hdl.MetricVariable) -> Union[list, None]:
+        """Return the CIs of a variable as a list of dfs ('upper' and 'lower'), if they exist in the netcdf"""
+        cis = []
+        if not self.has_CIs:
+            return cis
+        for ci in self._iter_vars(
+                type="ci",
+                filter_parms={
+                    "metric": Var.metric,
+                    "metric_ds": Var.metric_ds,
+                    "other_ds": Var.other_ds,
+                }
+        ):
+            values = ci.values
+            values.columns = [ci.bound]
+            cis.append(values)
+
+        return cis
 
 
 class QA4SMImg(MixinImg):
@@ -137,23 +329,6 @@ class QA4SMImg(MixinImg):
             return ds
 
     @property
-    def has_CIs(self):
-        """True if the validation result contains confidence intervals"""
-        itdoes = hdl.ConfidenceInterval in [type(var) for var in self.vars]
-
-        return itdoes
-
-    @property
-    def name(self) -> str:
-        """Create a unique name for the QA4SMImage from the netCDF file"""
-        ref = self.datasets.ref['pretty_title']
-        others = [other['pretty_title'] for other in self.datasets.others]
-
-        name = ",\n".join(others) + "\nv {} (ref)".format(ref)
-
-        return name
-
-    @property
     def metadata(self) -> dict:
         """If the image has metadata (ISMN reference), return a dict of shape {varname: Metadata}. Else, False."""
         metadata = {}
@@ -188,157 +363,6 @@ class QA4SMImg(MixinImg):
             )
 
         return metadata
-
-    def _load_vars(self, empty=False, only_metrics=False) -> list:
-        """
-        Create a list of common variables and fill each with values
-
-        Parameters
-        ----------
-        empty : bool, default is False
-            if True, Var.values is an empty dataframe
-        only_metrics : bool, default is False
-            if True, only variables for metric scores are kept (i.e. not gpi, idx ...)
-
-        Returns
-        -------
-        vars : list
-            list of QA4SMVariable objects for the validation variables
-        """
-        varslist = []
-        for varname in self.varnames:
-            if empty:
-                values = None
-            else:
-                values = self.df.loc[:, varname]
-
-            Var = hdl.QA4SMVariable(varname, self.ds.attrs, values=values).initialize()
-
-            if only_metrics and isinstance(Var, hdl.MetricVariable):
-                varslist.append(Var)
-            elif not only_metrics:
-                varslist.append(Var)
-
-        return varslist
-
-    def _load_metrics(self) -> dict:
-        """
-        Create a list of metrics for the file
-
-        Returns
-        -------
-        Metrics : dict
-            dictionary with shape {metric name: QA4SMMetric}
-        """
-        Metrics = {}
-        all_groups = globals.metric_groups.values()
-        for group in all_groups:
-            for metric in group:
-                metric_vars = []
-                for Var in self._iter_vars(filter_parms={'metric': metric}):
-                    metric_vars.append(Var)
-
-                if metric_vars:
-                    Metric = hdl.QA4SMMetric(metric, metric_vars)
-                    Metrics[metric] = Metric
-
-        return Metrics
-
-    def _iter_vars(self, type: str = None, name: str = None, filter_parms: dict = None) -> iter:
-        """
-        Iter through QA4SMVariable objects that are in the file
-
-        Parameters
-        ----------
-        type : str, default is None
-            One of 'metric', 'ci', 'metadata' can be specified to only iterate through the specific group
-        name : str, default is None
-            yield a specific variable by its name
-        filter_parms : dict
-            dictionary with QA4SMVariable attributes as keys and filter value as values (e.g. {g: 0})
-        """
-        type_lut = {
-            "metric": hdl.MetricVariable,
-            "ci": hdl.ConfidenceInterval,
-            "metadata": hdl.Metadata,
-        }
-        for Var in self.vars:
-            if name:
-                if name in [Var.varname, Var.pretty_name]:
-                    yield Var
-                    break
-                else:
-                    continue
-
-            if type is not None and not isinstance(Var, type_lut[type]):
-                continue
-            if filter_parms:
-                for key, val in filter_parms.items():
-                    if getattr(Var, key) == val:  # check all attribute individually
-                        check = True
-                    else:
-                        check = False  # does not match requirements
-                        break
-                if not check:
-                    continue
-
-            yield Var
-
-    def _iter_metrics(self, **filter_parms) -> iter:
-        """
-        Iter through QA4SMMetric objects that are in the file
-
-        Parameters
-        ----------
-        **filter_parms : kwargs, dict
-            dictionary with QA4SMMetric attributes as keys and filter value as values (e.g. {g: 0})
-        """
-        for Metric in self.metrics.values():
-            for key, val in filter_parms.items():
-                if val is None or getattr(Metric, key) == val:
-                    yield Metric
-
-    def group_vars(self, filter_parms: dict):
-        """
-        Return a list of QA4SMVariable that match filters
-
-        Parameters
-        ----------
-        **filter_parms : kwargs, dict
-            dictionary with QA4SMVariable attributes as keys and filter value as values (e.g. {g: 0})
-        """
-        vars = []
-        for Var in self._iter_vars(filter_parms=filter_parms):
-            vars.append(Var)
-
-        return vars
-
-    def group_metrics(self, metrics: list = None) -> (dict, dict, dict):
-        """
-        Load and group all metrics from file
-
-        Parameters
-        ----------
-        metrics: list or None
-            if list, only metrics in the list are grouped
-        """
-        common, double, triple = {}, {}, {}
-
-        # fetch Metrics
-        if metrics is None:
-            metrics = self.metrics.keys()
-
-        # fill dictionaries
-        for metric in metrics:
-            Metric = self.metrics[metric]
-            if Metric.g == 0:
-                common[metric] = Metric
-            elif Metric.g == 2:
-                double[metric] = Metric
-            elif Metric.g == 3:
-                triple[metric] = Metric
-
-        return common, double, triple
 
     def _ds2df(self, varnames: list = None) -> pd.DataFrame:
         """
@@ -407,25 +431,6 @@ class QA4SMImg(MixinImg):
         metrics_df = self._ds2df(varnames=varnames)
 
         return metrics_df
-
-    def get_cis(self, Var: hdl.MetricVariable) -> Union[list, None]:
-        """Return the CIs of a variable as a list of dfs ('upper' and 'lower'), if they exist in the netcdf"""
-        cis = []
-        if not self.has_CIs:
-            return cis
-        for ci in self._iter_vars(
-                type="ci",
-                filter_parms={
-                    "metric": Var.metric,
-                    "metric_ds": Var.metric_ds,
-                    "other_ds": Var.other_ds,
-                }
-        ):
-            values = ci.values
-            values.columns = [ci.bound]
-            cis.append(values)
-
-        return cis
 
     def _metric_stats(self, metric, id=None) -> list:
         """
@@ -517,36 +522,49 @@ class QA4SMImgHires(MixinImg):
 
     Parameters
     ----------
+    filepath : str or Path
+        Path to the results netcdf file (as created by QA4SM)
+    extent : tuple, optional (default: None)
+        Area to subset the values for -> (min_lon, max_lon, min_lat, max_lat)
+    metrics : list or None, optional (default: None)
+        Subset of the metrics to load from file, if None are passed, all
+        are loaded.
+    engine: str, optional (default: 'netcdf4')
+        Engine used by xarray to read data from file.
     chunk_size: int, optional. Default is -1
         If provided, it is used to load the dataset into dask arrays
         of size equal to 'chunk_size'. Use chuck_size -1 to load
         the dataset with Dask using a single chunk for all arrays.
     """
-
     def __init__(
             self, filepath,
+            index_names=globals.index_names,
             extent=None,
-            load_data=True,
+            metrics=None,
             engine="netcdf4",
             chunk_size=-1,
     ):
-        self.filepath = filepath
+        self.filepath = Path(filepath)
+        self.index_names = index_names
+
         self.ds = self._open_ds(
             engine=engine,
             chunk_size=chunk_size,
         )
+
         self.extent = self._get_extent(extent=extent)  # get extent from .nc file if not specified
         self.datasets = hdl.QA4SMDatasets(self.ds.attrs)
         self.varnames = list(self.ds.variables.keys())
 
-        if load_data:
-            self.df = self._ds2dask_dataframe()
-
-            # this try here is to obey tests, withouth a necessity of changing and commiting test files again
-            try:
-                self.ref_dataset_grid_stepsize = self.ds.val_dc_dataset0_grid_stepsize
-            except AttributeError:
-                self.ref_dataset_grid_stepsize = 'nan'
+        self.df = self._ds2dask_dataframe()
+        self.vars = self._load_vars()
+        self.metrics = self._load_metrics()
+        self.common, self.double, self.triple = self.group_metrics(metrics)
+        # this try here is to obey tests, withouth a necessity of changing and commiting test files again
+        try:
+            self.ref_dataset_grid_stepsize = self.ds.val_dc_dataset0_grid_stepsize
+        except AttributeError:
+            self.ref_dataset_grid_stepsize = 'nan'
 
     def _open_ds(self, engine="netcdf4", chunk_size=-1) -> xr.Dataset:
         try:
@@ -571,7 +589,10 @@ class QA4SMImgHires(MixinImg):
         return dataset
 
     def _ds2dask_dataframe(self):
-        """Get a dask.dataframe of the dataset variables"""
+        """
+        Get a dask.dataframe of the dataset variables. As multiindex dataframes
+        are not supported in Dask, the index is set to 'gpi'
+        """
         dask_series = []
         for varname in self.ds.variables:
             ser = dataframe.from_dask_array(self.ds[varname].data)
@@ -582,7 +603,19 @@ class QA4SMImgHires(MixinImg):
 
         return df
 
+    @property
+    def dask_index(self):
+        """Dask index corresponding to the multiindex used in QA4SMImg"""
+        index = self.df[self.index_names]
 
-im = QA4SMImgHires(
-    "/home/pstradio/Projects_data/QA4SM/Validations/0-ISMN.soil_moisture_with_1-ESA_CCI_SM_active.sm.nc",
-)
+        return index.compute()
+
+    def compute_values(self, dask_df):
+        """
+        Get a dask.dataframe and return a regular pd.DataFrame with
+        a self.index_names values"""
+        pandas_df = dask_df.compute()
+        pandas_df = pd.concat([pandas_df, self.dask_index], axis=1, join="inner")
+        pandas_df.set_index(self.index_names, inplace=True)
+
+        return pandas_df
