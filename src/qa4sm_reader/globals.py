@@ -222,7 +222,7 @@ def get_metric_units(dataset, raise_error=False):
         'C3S_combined': 'm³/m³',
         'GLDAS': 'm³/m³',
         'ASCAT': '% saturation',
-        'SMAP': 'm³/m³',   # old name
+        # 'SMAP': 'm³/m³',   # old name
         'SMAP_L3': 'm³/m³',
         'ERA5': 'm³/m³',
         'ERA5_LAND': 'm³/m³',
@@ -290,7 +290,7 @@ _dataset_pretty_names = {  # from qa4sm\validator\fixtures\datasets.json
     'GLDAS': 'GLDAS',
     'ASCAT': 'H-SAF ASCAT SSM CDR',
     'SMAP_L3': 'SMAP level 3',
-    'SMAP': 'SMAP level 3',  # old name for SMAP_L3
+    # 'SMAP': 'SMAP level 3',  # old name for SMAP_L3
     'ERA5': 'ERA5',
     'ERA5_LAND': 'ERA5-Land',
     'ESA_CCI_SM_active': 'ESA CCI SM active',
@@ -393,7 +393,7 @@ def get_resolution_info(dataset, raise_error=False):
         'C3S': 0.25,   # old name, unused
         'GLDAS': 0.25,
         'ASCAT': 12.5,
-        'SMAP': 36,   # old name, unused
+        # 'SMAP': 36,   # old name, unused
         'SMAP_L3': 36,
         'ERA5': 0.25,
         'ERA5_LAND': 0.1,
@@ -414,7 +414,7 @@ def get_resolution_info(dataset, raise_error=False):
         'C3S_combined': 'deg',
         'GLDAS': 'deg',
         'ASCAT': 'km',
-        'SMAP': 'km',   # old name, unused
+        # 'SMAP': 'km',   # old name, unused
         'SMAP_L3': 'km',
         'ERA5': 'deg',
         'ERA5_LAND': 'deg',
