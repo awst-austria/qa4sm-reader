@@ -2,25 +2,13 @@
 from qa4sm_reader import globals
 import qa4sm_reader.handlers as hdl
 from qa4sm_reader.plotting_methods import _format_floats, combine_soils, combine_depths, average_non_additive
-
+from qa4sm_reader.utils import transcribe
 from pathlib import Path
 import warnings
 
-import numpy as np
 import xarray as xr
 import pandas as pd
-from typing import Union
-
-
-def extract_periods(filepath) -> np.array:
-    """Get periods from .nc"""
-    dataset = xr.open_dataset(filepath)
-    if globals.period_name in dataset.dims:
-        return dataset[globals.period_name].values
-
-    else:
-        return np.array([None])
-
+from typing import Union, Tuple, Optional
 
 class SpatialExtentError(Exception):
     """Class to handle errors derived from the spatial extent of validations"""
@@ -31,7 +19,7 @@ class QA4SMImg(object):
     """A tool to analyze the results of a validation, which are stored in a netCDF file."""
     def __init__(self,
                  filepath,
-                 period=None,
+                 period=globals.DEFAULT_TSW,
                  extent=None,
                  ignore_empty=True,
                  metrics=None,
@@ -46,8 +34,8 @@ class QA4SMImg(object):
         ----------
         filepath : str
             Path to the results netcdf file (as created by QA4SM)
-        period : Any, optional (default: None)
-            If results for multiple validation periods are stored in file,
+        period : str, optional (default: `globals.DEFAULT_TSW`)
+            if results for multiple validation periods, i.e. multiple temporal sub-windows, are stored in file,
             load this period.
         extent : tuple, optional (default: None)
             Area to subset the values for -> (min_lon, max_lon, min_lat, max_lat)
@@ -84,17 +72,36 @@ class QA4SMImg(object):
             except AttributeError:
                 self.ref_dataset_grid_stepsize = 'nan'
 
-    def _open_ds(self, extent=None, period=None, engine='h5netcdf'):
-        """Open .nc as xarray datset, with selected extent"""
+    def _open_ds(self, extent: Optional[Tuple]=None, period:Optional[str]=globals.DEFAULT_TSW, engine:Optional[str]='h5netcdf') -> xr.Dataset:
+        """Open .nc as `xarray.Datset`, with selected extent and period.
+
+        Parameters
+        ----------
+        extent : tuple, optional (default: None)
+            Area to subset the values for -> (min_lon, max_lon, min_lat, max_lat)
+        period : str, optional (default: `globals.DEFAULT_TSW`)
+            if results for multiple validation periods, i.e. multiple temporal sub-windows, are stored in file,
+            load this period.
+        engine: str, optional (default: h5netcdf)
+            Engine used by xarray to read data from file.
+
+        Returns
+        -------
+        ds : xarray.Dataset
+            Dataset with the validation results
+        """
         dataset = xr.load_dataset(
             self.filepath,
             drop_variables="time",
             engine=engine,
         )
-        if period is not None:
-            ds = dataset.sel(dict(period=period))
-        else:
-            ds = dataset
+
+        if not globals.TEMPORAL_SUB_WINDOW_NC_COORD_NAME in dataset.dims:
+            dataset = transcribe(self.filepath)
+
+
+        selection = {globals.TEMPORAL_SUB_WINDOW_NC_COORD_NAME: period}  # allows for flexible loading of both the dimension and temproal sub-window
+        ds = dataset.sel(selection)
         # drop non-spatial variables (e.g.'time')
         if globals.time_name in ds.variables:
             ds = ds.drop_vars(globals.time_name)
@@ -326,7 +333,7 @@ class QA4SMImg(object):
 
         return vars
 
-    def group_metrics(self, metrics: list = None) -> (dict, dict, dict):
+    def group_metrics(self, metrics: list = None) -> Union[None, Tuple[dict, dict, dict]]:
         """
         Load and group all metrics from file
 
@@ -394,7 +401,7 @@ class QA4SMImg(object):
 
         return df
 
-    def metric_df(self, metrics: str or list):
+    def metric_df(self, metrics: Union[str, list]) -> pd.DataFrame:
         """
         Group all variables for the metric in a common data frame
 

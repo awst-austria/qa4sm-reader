@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+from re import M
 import numpy as np
 import pytest
 
@@ -70,7 +71,7 @@ def test_load_vars(img):
     Vars = img._load_vars()
     assert len(Vars) == len(img.varnames)
     Metr_Vars = img._load_vars(only_metrics=True)
-    assert len(Metr_Vars) == len(Vars) - 21
+    assert len(Metr_Vars) == len(Vars) - 22
 
 
 def test_iter_vars(img):
@@ -120,13 +121,16 @@ def test_ds2df(img):
 
 def test_metric_df(img):
     df = img.metric_df(['R'])
+    print(list(df.columns))
     assert list(df.columns) == [
         'R_between_0-ERA5_LAND_and_1-C3S_combined',
         'R_ci_lower_between_0-ERA5_LAND_and_1-C3S_combined',
         'R_ci_upper_between_0-ERA5_LAND_and_1-C3S_combined',
         'R_between_0-ERA5_LAND_and_2-SMOS_IC',
         'R_ci_lower_between_0-ERA5_LAND_and_2-SMOS_IC',
-        'R_ci_upper_between_0-ERA5_LAND_and_2-SMOS_IC', 'idx'
+        'R_ci_upper_between_0-ERA5_LAND_and_2-SMOS_IC',
+        globals.TEMPORAL_SUB_WINDOW_NC_COORD_NAME,
+        'idx',
     ]
 
 

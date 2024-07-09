@@ -1,10 +1,16 @@
 # -*- coding: utf-8 -*-
+from dataclasses import dataclass
 import warnings
 
 from qa4sm_reader import globals
 from parse import *
 import warnings as warn
 import re
+from typing import List, Optional, Tuple, Dict, Any, Union
+
+import matplotlib
+import matplotlib.axes
+from matplotlib.figure import Figure
 
 
 class MixinVarmeta:
@@ -43,7 +49,7 @@ class MixinVarmeta:
         else:
             return self.ref_ds[0]
 
-    def get_varmeta(self) -> (tuple, tuple, tuple, tuple):
+    def get_varmeta(self) -> Tuple[Tuple, Tuple, Tuple, Tuple]:
         """
         Get the datasets from the current variable. Each dataset is provided with shape
         (id, dict{names})
@@ -128,6 +134,11 @@ class QA4SMDatasets():
         ref_dc = 0
 
         try:
+            # print(f'globals._ref_ds_attr: {globals._ref_ds_attr}')
+            # print(f'self.meta: {self.meta}')
+            # print(
+            #     f'parse(globals._ds_short_name_attr, val_ref): {parse(globals._ds_short_name_attr, self.meta[globals._ref_ds_attr])}'
+            # )
             val_ref = self.meta[globals._ref_ds_attr]
             ref_dc = parse(globals._ds_short_name_attr, val_ref)[0]
         except KeyError as e:
@@ -298,7 +309,7 @@ class QA4SMDatasets():
 
         return others_meta
 
-    def dataset_metadata(self, id: int, element: str or list = None) -> tuple:
+    def dataset_metadata(self, id: int, element: Union[str, list] = None) -> tuple:
         """
         Get the metadata for the dataset specified by the id. This function is used by the QA4SMMetricVariable class
 
@@ -415,7 +426,7 @@ class QA4SMVariable():
                 self.varname)
         return parse(pattern, self.varname)
 
-    def _parse_varname(self) -> (str, int, dict):
+    def _parse_varname(self) -> Tuple[str, int, dict]:
         """
         Parse the name to get the metric, group and variable data
 
@@ -542,3 +553,23 @@ class QA4SMMetric():
                 break
 
         return it_does
+
+#$$
+@dataclass()
+class ClusteredBoxPlotContainer:
+    '''Container for the figure and axes of a clustered boxplot.
+    See `qa4sm_reader.plotting_methods.figure_template` for usage.
+    '''
+    fig: matplotlib.figure.Figure
+    ax_box: matplotlib.axes.Axes
+    ax_median: Optional[matplotlib.axes.Axes] = None
+    ax_iqr: Optional[matplotlib.axes.Axes] = None
+    ax_n: Optional[matplotlib.axes.Axes] = None
+
+#$$
+@dataclass(frozen=True)
+class CWContainer:
+    '''Container for the centers and widths of the boxplots. Used for the plotting of the clustered boxplots.'''
+    centers: List[float]
+    widths: List[float]
+    name: Optional[str] = 'Generic Dataset'

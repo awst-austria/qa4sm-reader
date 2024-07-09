@@ -21,9 +21,9 @@ class QA4SMComparison:
     take some time, the class can be updated keeping memory of what has already been initialized
     """
     def __init__(self,
-                 paths: list or str,
+                 paths: Union[list, str],
                  extent: tuple = None,
-                 get_intersection: bool = True):
+                 get_intersection: bool = True) -> None:
         """
         Initialise the QA4SMImages from the paths to netCDF files specified
 

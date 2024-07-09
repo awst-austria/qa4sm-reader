@@ -6,8 +6,10 @@ Settings and global variables used in the reading and plotting procedures
 import warnings
 
 import cartopy.crs as ccrs
+import matplotlib
 import matplotlib.colors as cl
-import matplotlib.pyplot as plt
+import numpy as np
+import os
 
 # PLOT DEFAULT SETTINGS
 # =====================================================
@@ -40,16 +42,31 @@ max_title_len = 8 * map_figsize[
 
 # === boxplot_basic defaults ===
 boxplot_printnumbers = True  # Print 'median', 'nObs', 'stdDev' to the boxplot_basic.
-boxplot_height = 6
+boxplot_height = 7 #$ increased by 1 to house logo
 boxplot_width = 2.1  # times (n+1), where n is the number of boxes.
 boxplot_title_len = 8 * boxplot_width  # times the number of boxes. maximum length of plot title in chars.
 tick_size = 8.5
 
+#TODO: remove eventually, as watermarlk string no longer needed
 # === watermark defaults ===
 watermark = u'made with QA4SM (qa4sm.eu)'  # Watermark string
 watermark_pos = 'bottom'  # Default position ('top' or 'bottom' or None)
 watermark_fontsize = 8  # fontsize in points (matplotlib uses 72ppi)
-watermark_pad = 5  # padding above/below watermark in points (matplotlib uses 72ppi)
+watermark_pad = 50  # padding above/below watermark in points (matplotlib uses 72ppi)
+
+#$$
+# === watermark logo defaults ===
+watermark_logo_position = 'lower_center'
+watermark_logo_scale = 0.1  # height of the logo relative to the height of the figure
+watermark_logo_offset_comp_plots = (0, -0.1)
+watermark_logo_offset_metadata_plots = (0, -0.08)
+watermark_logo_offset_map_plots = (0, -0.15)
+watermark_logo_offset_bar_plots = (0, -0.1)
+watermark_logo_offset_box_plots = (0, -0.15)
+watermark_logo_pth = os.path.join(
+    os.path.dirname(
+        os.path.abspath(__file__)), 'static', 'images', 'logo',
+    'QA4SM_logo_long.png')
 
 # === filename template ===
 ds_fn_templ = "{i}-{ds}.{var}"
@@ -93,28 +110,27 @@ status_replace = {
 def get_status_colors():
     # function to get custom cmap for calculation errors
     # limited to 14 different error entries to produce distinct colors
-    cmap = plt.cm.get_cmap('Set3', len(status) - 2)
+    cmap = cl.ListedColormap(matplotlib.colormaps['Set3'].colors[:len(status) - 2])
     colors = [cmap(i) for i in range(cmap.N)]
     colors.insert(0, (0, 0.66666667, 0.89019608, 1.0))
     colors.insert(0, (0.45882353, 0.08235294, 0.11764706, 1.0))
     cmap = cl.ListedColormap(colors=colors)
     return cmap
 
-
 _cclasses = {
-    'div_better': plt.cm.get_cmap(
+    'div_better': matplotlib.colormaps[
         'RdYlBu'
-    ),  # diverging: 1 good, 0 special, -1 bad (pearson's R, spearman's rho')
-    'div_worse': plt.cm.get_cmap(
+    ],  # diverging: 1 good, 0 special, -1 bad (pearson's R, spearman's rho')
+    'div_worse': matplotlib.colormaps[
         'RdYlBu_r'
-    ),  # diverging: 1 bad, 0 special, -1 good (difference of bias)
+    ],  # diverging: 1 bad, 0 special, -1 good (difference of bias)
     'div_neutr':
-    plt.cm.get_cmap('RdYlGn'),  # diverging: zero good, +/- neutral: (bias)
-    'seq_worse': plt.cm.get_cmap(
+    matplotlib.colormaps['RdYlGn'],  # diverging: zero good, +/- neutral: (bias)
+    'seq_worse': matplotlib.colormaps[
         'YlGn_r'
-    ),  # sequential: increasing value bad (p_R, p_rho, rmsd, ubRMSD, RSS)
-    'seq_better': plt.cm.get_cmap(
-        'YlGn'),  # sequential: increasing value good (n_obs, STDerr)
+    ],  # sequential: increasing value bad (p_R, p_rho, rmsd, ubRMSD, RSS)
+    'seq_better': matplotlib.colormaps[
+        'YlGn'],  # sequential: increasing value good (n_obs, STDerr)
     'qua_neutr':
     get_status_colors(),  # qualitative category with 2 forced colors
 }
@@ -311,28 +327,101 @@ def get_metric_units(dataset, raise_error=False):
 
             return "n.a."
 
-
-# label name for all metrics
-_metric_name = {  # from /qa4sm/validator/validation/globals.py
+COMMON_METRICS = {
     'R': 'Pearson\'s r',
     'p_R': 'Pearson\'s r p-value',
-    'rho': 'Spearman\'s ρ',
-    'p_rho': 'Spearman\'s ρ p-value',
     'RMSD': 'Root-mean-square deviation',
     'BIAS': 'Bias (difference of means)',
     'n_obs': '# observations',
     'urmsd': 'Unbiased root-mean-square deviation',
     'RSS': 'Residual sum of squares',
-    'tau': 'Kendall rank correlation',
-    'p_tau': 'Kendall tau p-value',
     'mse': 'Mean square error',
     'mse_corr': 'Mean square error correlation',
     'mse_bias': 'Mean square error bias',
     'mse_var': 'Mean square error variance',
+}
+
+TC_METRICS = {
     'snr': 'Signal-to-noise ratio',
     'err_std': 'Error standard deviation',
     'beta': 'TC scaling coefficient',
+}
+
+READER_EXCLUSIVE_METRICS = {
+    'rho': 'Spearman\'s ρ',
+    'p_rho': 'Spearman\'s ρ p-value',
+    'tau': 'Kendall rank correlation',
+    'p_tau': 'Kendall tau p-value',
     'status': 'Validation errors'
+}
+
+QA4SM_EXCLUSIVE_METRICS = {
+    'rho': 'Spearman\'s rho',
+    'p_rho': 'Spearman\'s rho p-value',
+    'status': '# status',
+}
+
+_metric_name = {**COMMON_METRICS, **READER_EXCLUSIVE_METRICS, **TC_METRICS}
+
+METRICS = {**COMMON_METRICS, **QA4SM_EXCLUSIVE_METRICS}
+
+NON_METRICS = [
+    'gpi',
+    'lon',
+    'lat',
+    'clay_fraction',
+    'climate_KG',
+    'climate_insitu',
+    'elevation',
+    'instrument',
+    'latitude',
+    'lc_2000',
+    'lc_2005',
+    'lc_2010',
+    'lc_insitu',
+    'longitude',
+    'network',
+    'organic_carbon',
+    'sand_fraction',
+    'saturation',
+    'silt_fraction',
+    'station',
+    'timerange_from',
+    'timerange_to',
+    'variable',
+    'instrument_depthfrom',
+    'instrument_depthto',
+    'frm_class',
+]
+
+METADATA_TEMPLATE = {
+    'other_ref': None,
+    'ismn_ref': {
+        'clay_fraction': np.float32([np.nan]),
+        'climate_KG': np.array([' ' * 256]),
+        'climate_insitu': np.array([' ' * 256]),
+        'elevation': np.float32([np.nan]),
+        'instrument': np.array([' ' * 256]),
+        'latitude': np.float32([np.nan]),
+        'lc_2000': np.float32([np.nan]),
+        'lc_2005': np.float32([np.nan]),
+        'lc_2010': np.float32([np.nan]),
+        'lc_insitu': np.array([' ' * 256]),
+        'longitude': np.float32([np.nan]),
+        'network': np.array([' ' * 256]),
+        'organic_carbon': np.float32([np.nan]),
+        'sand_fraction': np.float32([np.nan]),
+        'saturation': np.float32([np.nan]),
+        'silt_fraction': np.float32([np.nan]),
+        'station': np.array([' ' * 256]),
+        'timerange_from': np.array([' ' * 256]),
+        'timerange_to': np.array([' ' * 256]),
+        'variable': np.array([' ' * 256]),
+        'instrument_depthfrom': np.float32([np.nan]),
+        'instrument_depthto': np.float32([np.nan]),
+        # only available for FRM4SM ISMN version(s)
+        'frm_class': np.array([' ' * 256]),
+    }
 }
 
 # BACKUPS
@@ -618,7 +707,7 @@ metadata = {
     "climate_insitu": ("climate in-situ", climate_classes, "classes", None),
     "elevation": ("elevation", None, "continuous", "[m]"),
     "instrument": ("instrument type", None, "discrete",
-                   None),  # todo: improve labels (too packed)
+                   None),  #todo: improve labels (too packed)
     "lc_2000": ("land cover class (2000)", lc_classes, "classes", None),
     "lc_2005": ("land cover class (2005)", lc_classes, "classes", None),
     "lc_2010": ("land cover class (2010)", lc_classes, "classes", None),
@@ -651,3 +740,96 @@ _metadata_exclude = [
     'p_tau',
     'status',
 ]
+
+METRIC_TEMPLATE = '_between_{ds1}_and_{ds2}'
+METRIC_CI_TEMPLATE = '{metric}_ci_{bound}_between_{ds1}_and_{ds2}_{ending}'
+
+
+# intra-annual valdiation metric related settings
+# =====================================================
+
+DEFAULT_TSW = 'bulk' # default temporal sub-window (in the case of no temporal sub-windowing)
+TEMPORAL_SUB_WINDOW_NC_COORD_NAME = 'tsw' # name of the period coordinate in the netcdf file (Temporal Sub-Window)
+
+TEMPORAL_SUB_WINDOW_SEPARATOR = '|'
+
+INTRA_ANNUAL_METRIC_TEMPLATE = ["{tsw}", TEMPORAL_SUB_WINDOW_SEPARATOR,
+                                "{metric}"]  #$$
+
+INTRA_ANNUAL_TCOL_METRIC_TEMPLATE = ["{tsw}", TEMPORAL_SUB_WINDOW_SEPARATOR,
+                                "{metric}", "_", "{number}-{dataset}",
+                                "_between_"]
+
+# default temporal sub windows
+TEMPORAL_SUB_WINDOWS = {
+    "seasons": {
+        "S1": [[12, 1], [2, 28]],
+        "S2": [[3, 1], [5, 31]],
+        "S3": [[6, 1], [8, 31]],
+        "S4": [[9, 1], [11, 30]],
+    },
+    "months": {
+        "Jan": [[1, 1], [1, 31]],
+        "Feb": [[2, 1], [2, 28]],
+        "Mar": [[3, 1], [3, 31]],
+        "Apr": [[4, 1], [4, 30]],
+        'May': [[5, 1], [5, 31]],
+        "Jun": [[6, 1], [6, 30]],
+        "Jul": [[7, 1], [7, 31]],
+        "Aug": [[8, 1], [8, 31]],
+        "Sep": [[9, 1], [9, 30]],
+        "Oct": [[10, 1], [10, 31]],
+        "Nov": [[11, 1], [11, 30]],
+        "Dec": [[12, 1], [12, 31]],
+    }
+}
+
+CLUSTERED_BOX_PLOT_STYLE = {
+    'fig_params': {
+        'title_fontsize': 20,
+        'y_labelsize': 18,
+        'tick_labelsize': 16,
+        'legend_fontsize': 12,
+    },
+    'colors': {
+        'Teal Blue':        '#00778F',
+        'Mustard Yellow':   '#FFD166',
+        'Sage Green':       '#8FB339',
+        'Coral Pink':       '#EF476F',
+        'Steel Gray':       '#6A0572',
+    }
+}
+
+CLUSTERED_BOX_PLOT_SAVENAME = 'comparison_boxplot_{metric}.{filetype}'
+
+
+
+# netCDF transcription related settings
+# =====================================================
+IMPLEMENTED_COMPRESSIONS = ['zlib']
+
+ALLOWED_COMPRESSION_LEVELS = [None, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+BAD_METRICS = ['time']
+
+DATASETS = [
+    'C3S_combined',
+    'ISMN',
+    'GLDAS',
+    'SMAP_L3',
+    'ASCAT',
+    'ESA_CCI_SM_combined',
+    'ESA_CCI_SM_active',
+    'ESA_CCI_SM_passive',
+    'SMOS_IC',
+    'ERA5',
+    'ERA5_LAND',
+    'CGLS_CSAR_SSM1km',
+    'CGLS_SCATSAR_SWI1km',
+    'SMOS_L3',
+    'SMOS_L2',
+    'SMAP_L2',
+    'SMOS_SBPCA',
+]
+
+MAX_NUM_DS_PER_VAL_RUN = 6

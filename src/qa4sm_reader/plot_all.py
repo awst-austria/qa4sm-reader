@@ -1,15 +1,21 @@
-# -*- coding: utf-8 -*-
+# %%
+# # -*- coding: utf-8 -*-
 import os
-import warnings
-from typing import Union
+from typing import Union, List, Tuple, Dict
+from itertools import chain
 
 import pandas as pd
-from qa4sm_reader.plotter import QA4SMPlotter
-from qa4sm_reader.img import QA4SMImg, extract_periods
+from qa4sm_reader.plotter import QA4SMPlotter, QA4SMCompPlotter
+from qa4sm_reader.img import QA4SMImg
+from qa4sm_reader.netcdf_transcription import Pytesmo2Qa4smResultsTranscriber
 import qa4sm_reader.globals as globals
+import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
 
 
 def plot_all(filepath: str,
+             temporal_sub_windows: List[str] = None,
              metrics: list = None,
              extent: tuple = None,
              out_dir: str = None,
@@ -18,7 +24,7 @@ def plot_all(filepath: str,
              save_metadata: Union[str, bool] = 'never',
              save_csv: bool = True,
              engine: str = 'h5netcdf',
-             **plotting_kwargs) -> tuple:
+             **plotting_kwargs) -> Tuple[List[str], List[str], List[str], List[str]]:
     """
     Creates boxplots for all metrics and map plots for all variables.
     Saves the output in a folder-structure.
@@ -27,6 +33,8 @@ def plot_all(filepath: str,
     ----------
     filepath : str
         path to the *.nc file to be processed.
+    temporal_sub_windows : List[str], optional (default: None)
+        List of temporal sub-windows to be processed. If None, all periods present are automatically extracted from the file.
     metrics : set or list, optional (default: None)
         metrics to be plotted. If None, all metrics with data are plotted
     extent : tuple, optional (default: None)
@@ -60,7 +68,10 @@ def plot_all(filepath: str,
     fnames_mapplots: list
         lists of filenames for created mapplots and boxplots
     fnames_csv: list
+    fnames_cbplot: list
+        list of filenames for created comparison boxplots
     """
+
     if isinstance(save_metadata, bool):
         if not save_metadata:
             save_metadata = 'never'
@@ -76,8 +87,13 @@ def plot_all(filepath: str,
 
     # initialise image and plotter
     fnames_bplot, fnames_mapplot, fnames_csv = [], [], []
-    periods = extract_periods(filepath)
+    if temporal_sub_windows is None:
+        periods = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(filepath)
+    else:
+        periods = np.array(temporal_sub_windows)
+
     for period in periods:
+        print(f'period: {period}')
         img = QA4SMImg(
             filepath,
             period=period,
@@ -96,6 +112,7 @@ def plot_all(filepath: str,
         for metric in metrics:
             metric_bplots, metric_mapplots = plotter.plot_metric(
                 metric=metric,
+                period=period,
                 out_types=out_type,
                 save_all=save_all,
                 **plotting_kwargs)
@@ -106,27 +123,48 @@ def plot_all(filepath: str,
                 fnames_mapplot.extend(metric_mapplots)
             if img.metadata and (save_metadata != 'never'):
                 if save_metadata == 'always':
-                    kwargs = {
-                        'meta_boxplot_min_samples': 0
-                    }
+                    kwargs = {'meta_boxplot_min_samples': 0}
                 else:
                     kwargs = {
-                        'meta_boxplot_min_samples': globals.meta_boxplot_min_samples
+                        'meta_boxplot_min_samples':
+                        globals.meta_boxplot_min_samples
                     }
 
-                fnames_bplot.extend(
-                    plotter.plot_save_metadata(
-                        metric,
-                        out_types=out_type,
-                        **kwargs
-                    ))
+                if period == globals.DEFAULT_TSW:
+                    kwargs['period'] = globals.DEFAULT_TSW
 
+                fnames_bplot.extend(
+                    plotter.plot_save_metadata(metric,
+                                               out_types=out_type,
+                                               **kwargs))
 
         if save_csv:
-            out_csv = plotter.save_stats()
+            out_csv = plotter.save_stats(period=period)
             fnames_csv.append(out_csv)
 
-    return fnames_bplot, fnames_mapplot, fnames_csv
+    #$$
+    # ? move somewhere else?
+    fnames_cbplot = []
+    metrics_not_to_plot = list(set(chain(globals._metadata_exclude, globals.metric_groups[3], ['n_obs']))) # metadata, tcol metrics, n_obs
+    if globals.DEFAULT_TSW in periods and len(periods) > 1:
+        cbp = QA4SMCompPlotter(filepath)
+        if not os.path.isdir(os.path.join(out_dir, 'comparison_boxplots')):
+            os.makedirs(os.path.join(out_dir, 'comparison_boxplots'))
+
+        for available_metric in cbp.metric_kinds_available:
+            if available_metric in metrics.keys(
+            ) and available_metric not in metrics_not_to_plot:
+                spth = [Path(out_dir) / 'comparison_boxplots' /
+                        f'{globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=available_metric, filetype=_out_type)}'
+                        for _out_type in out_type]
+                _fig = cbp.plot_cbp(
+                    chosen_metric=available_metric,
+                    out_name=spth,
+                )
+                plt.close(_fig)
+                fnames_cbplot.extend(spth)
+
+    return fnames_bplot, fnames_mapplot, fnames_csv, fnames_cbplot
 
 
 def get_img_stats(

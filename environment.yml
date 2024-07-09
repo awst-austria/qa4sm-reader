@@ -19,3 +19,4 @@ dependencies:
     - pyproj
     - pytest
     - pytest-cov
+    - pytesmo
