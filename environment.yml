@@ -18,5 +18,6 @@ dependencies:
     - seaborn
     - pygeogrids
     - pyproj
+    - pyscaffold
     - pytest
     - pytest-cov
