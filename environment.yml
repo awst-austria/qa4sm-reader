@@ -3,12 +3,14 @@ channels:
 - defaults
 - conda-forge
 dependencies:
+- python=3.10
 - xarray
 - netcdf4
 - pandas
 - numpy
 - matplotlib
 - cartopy>=0.21
+- pyproj
 - h5netcdf
 - pip
 - pip:
@@ -17,7 +19,5 @@ dependencies:
     - scipy
     - seaborn
     - pygeogrids
-    - pyproj
-    - pyscaffold
     - pytest
     - pytest-cov
