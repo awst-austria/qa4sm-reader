@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@v2
         with:
           submodules: true
-      - uses: conda-incubator/setup-miniconda@v2
+      - uses: conda-incubator/setup-miniconda@artifacts
         with:
           miniconda-version: "latest"
           auto-update-conda: true
@@ -50,19 +50,19 @@ jobs:
       - name: Export Environment
         shell: bash -l {0}
         run: |
-          mkdir -p .artifacts
+          mkdir -p artifacts
           filename=env_py${{ matrix.python-version }}_${{ matrix.os }}.yml
-          conda env export --no-builds | grep -v "prefix" > .artifacts/$filename
+          conda env export --no-builds | grep -v "prefix" > artifacts/$filename
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: os_py_environments
-          path: .artifacts/*
+          path: artifacts/*
       - name: Install package and test
         shell: bash -l {0}
         run: |
-          python setup.py install
-          python setup.py test
+          pip install -e .
+          pytest
       - name: Upload Coverage
         shell: bash -l {0}
         run: |
