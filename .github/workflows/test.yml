@@ -56,7 +56,7 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: os_py_environments
+          name: Artifacts-py${{ matrix.python-version }}-${{ matrix.os }}
           path: artifacts/*
       - name: Install package and test
         shell: bash -l {0}
