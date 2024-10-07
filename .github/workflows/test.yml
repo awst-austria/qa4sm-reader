@@ -38,9 +38,15 @@ jobs:
             - name: Initialize micromamba environment
               shell: bash -l {0}
               run: |
-                  source ~/micromamba/bin/micromamba shell init -s bash -p ~/micromamba/envs/qa4sm_reader
+                  micromamba shell init -s bash -p ~/micromamba/envs/qa4sm_reader
+                  micromamba create -y --name qa4sm_reader python=${{ matrix.python-version }}  # Explicitly create the environment if not already created
+                  echo "source ~/micromamba/etc/profile.d/micromamba.sh" >> ~/.bashrc
+
+            - name: Activate environment
+              shell: bash -l {0}
+              run: |
+                  source ~/micromamba/etc/profile.d/micromamba.sh
                   micromamba activate qa4sm_reader
-                  micromamba install python=${{ matrix.python-version }} -y
 
             - name: Print environment infos
               shell: bash -l {0}
@@ -56,7 +62,7 @@ jobs:
               run: |
                   mkdir -p artifacts
                   filename=env_py${{ matrix.python-version }}_${{ matrix.os }}.yml
-                  micromamba env export > artifacts/$filename
+                  micromamba env export --name qa4sm_reader > artifacts/$filename
 
             - name: Upload Artifacts
               uses: actions/upload-artifact@v4
