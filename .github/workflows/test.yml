@@ -45,7 +45,7 @@ jobs:
                     micromamba create -y --name qa4sm_reader --file ${{ matrix.ymlfile }}
                     echo "source ~/micromamba/etc/profile.d/micromamba.sh" >> ~/.bashrc
                   else
-                    set "PATH=%PATH%;%USERPROFILE%\micromamba\bin"
+                    echo "set PATH=%PATH%;%USERPROFILE%\micromamba\bin" >> $GITHUB_ENV
                     micromamba shell init -s cmd -p %USERPROFILE%\micromamba\envs\qa4sm_reader
                     micromamba create -y --name qa4sm_reader --file %USERPROFILE%\micromamba\envs\qa4sm_reader\${{ matrix.ymlfile }}
                   fi
