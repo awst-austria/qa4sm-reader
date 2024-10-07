@@ -19,10 +19,9 @@ except VersionConflict:
     sys.exit(1)
 
 if __name__ == "__main__":
-    setup(
-        use_pyscaffold=True,
-        install_requires=[
-            'pytest',
-            'pytest-cov',
-            # other dependencies
-        ])
+    setup(use_pyscaffold=True,
+          install_requires=[
+              'pytest',
+              'pytest-cov',
+              'parse',
+          ])
