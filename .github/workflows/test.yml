@@ -1,9 +1,6 @@
 # This workflow will install Python dependencies and run tests on
 # windows and linux systems with a variety of Python versions
 
-# For more information see:
-# https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
-
 name: tests
 
 on:
@@ -35,11 +32,15 @@ jobs:
             - uses: mamba-org/setup-micromamba@v1
               with:
                   micromamba-version: 'latest'
-                  environment-file: ${{ matrix.ymlfile }}
-                  activate-environment: qa4sm_reader # Ensure this matches the name in your environment.yml
-                  python-version: ${{ matrix.python-version }}
-                  auto-activate-base: false
-                  extra-specs: 'python=${{ matrix.python-version }}'
+                  environment-file: ${{ matrix.ymlfile }} # Ensure the env file is correctly defined
+                  micromamba-root-path: ~/micromamba # Optional, where to install micromamba
+
+            - name: Initialize micromamba environment
+              shell: bash -l {0}
+              run: |
+                  source ~/micromamba/bin/micromamba shell init -s bash -p ~/micromamba/envs/qa4sm_reader
+                  micromamba activate qa4sm_reader
+                  micromamba install python=${{ matrix.python-version }} -y
 
             - name: Print environment infos
               shell: bash -l {0}
@@ -55,7 +56,7 @@ jobs:
               run: |
                   mkdir -p artifacts
                   filename=env_py${{ matrix.python-version }}_${{ matrix.os }}.yml
-                  micromamba env export > artifacts/$filename
+                  micromamba env export --no-builds > artifacts/$filename
 
             - name: Upload Artifacts
               uses: actions/upload-artifact@v4
