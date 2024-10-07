@@ -23,5 +23,6 @@ if __name__ == "__main__":
         use_pyscaffold=True,
         install_requires=[
             'pytest',
+            'pytest-cov',
             # other dependencies
         ])
