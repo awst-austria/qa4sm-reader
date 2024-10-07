@@ -49,6 +49,7 @@ jobs:
               if: runner.os == 'Windows'
               shell: cmd
               run: |
+                  set "PATH=%PATH%;%USERPROFILE%\micromamba\bin"
                   micromamba shell init -s cmd -p %USERPROFILE%\micromamba\envs\qa4sm_reader
                   micromamba create -y --name qa4sm_reader --file %USERPROFILE%\micromamba\envs\qa4sm_reader\${{ matrix.ymlfile }}
 
