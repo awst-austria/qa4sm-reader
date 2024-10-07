@@ -71,3 +71,4 @@ tests/test_data/out/*
 */_local_scripts/*
 .coverage*
 .artifacts/*
+.vscode
