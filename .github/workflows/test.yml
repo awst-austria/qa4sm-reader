@@ -55,7 +55,7 @@ jobs:
               run: |
                   mkdir -p artifacts
                   filename=env_py${{ matrix.python-version }}_${{ matrix.os }}.yml
-                  micromamba env export --no-builds > artifacts/$filename
+                  micromamba env export > artifacts/$filename
 
             - name: Upload Artifacts
               uses: actions/upload-artifact@v4
