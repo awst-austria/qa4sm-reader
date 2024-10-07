@@ -1,5 +1,5 @@
 # This workflow will install Python dependencies and run tests on
-# Windows and Linux systems with a variety of Python versions
+# windows and linux systems with a variety of Python versions
 
 # For more information see:
 # https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
@@ -14,7 +14,7 @@ on:
         - cron: '0 0 * * *' # daily
 
 jobs:
-    linux-tests:
+    build:
         name: Build py${{ matrix.python-version }} @ ${{ matrix.os }} 🐍
         runs-on: ${{ matrix.os }}
         strategy:
@@ -22,99 +22,55 @@ jobs:
                 python-version: ['3.8', '3.9', '3.10']
                 os: ['ubuntu-latest']
                 ymlfile: ['environment.yml']
+                include:
+                    - os: 'windows-latest'
+                      python-version: '3.10'
+                      ymlfile: 'environment.yml'
+
         steps:
             - uses: actions/checkout@v2
               with:
                   submodules: true
-            - uses: conda-incubator/setup-miniconda@v3
+
+            - uses: mamba-org/setup-micromamba@v1
               with:
-                  miniconda-version: 'latest'
-                  auto-update-conda: true
-                  python-version: ${{ matrix.python-version }}
+                  micromamba-version: 'latest'
                   environment-file: ${{ matrix.ymlfile }}
-                  mamba-version: '*'
-                  activate-environment: qa4sm_reader # todo: must match with name in environment.yml
+                  activate-environment: qa4sm_reader # Ensure this matches the name in your environment.yml
+                  python-version: ${{ matrix.python-version }}
                   auto-activate-base: false
+                  extra-specs: 'python=${{ matrix.python-version }}'
+
             - name: Print environment infos
               shell: bash -l {0}
               run: |
-                  conda info -a
-                  conda list
+                  micromamba info
+                  micromamba list
                   pip list
                   which pip
                   which python
+
             - name: Export Environment
               shell: bash -l {0}
               run: |
                   mkdir -p artifacts
                   filename=env_py${{ matrix.python-version }}_${{ matrix.os }}.yml
-                  conda env export --no-builds | grep -v "prefix" > artifacts/$filename
-            - name: Upload Artifacts
-              uses: actions/upload-artifact@v4
-              with:
-                  name: Artifacts-py${{ matrix.python-version }}-${{ matrix.os }}
-                  path: artifacts/*
-            - name: Install package and test
-              shell: bash -l {0}
-              run: |
-                  pip install -e .
-                  pytest
-            - name: Upload Coverage
-              shell: bash -l {0}
-              run: |
-                  pip install coveralls && coveralls --service=github
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                  COVERALLS_FLAG_NAME: ${{ matrix.python-version }}
-                  COVERALLS_PARALLEL: true
+                  micromamba env export --no-builds > artifacts/$filename
 
-    windows-tests:
-        name: Build py${{ matrix.python-version }} @ ${{ matrix.os }} 🐍
-        runs-on: ${{ matrix.os }}
-        strategy:
-            matrix:
-                python-version: ['3.10']
-                os: ['windows-latest']
-                ymlfile: ['environment.yml']
-        steps:
-            - uses: actions/checkout@v2
-              with:
-                  submodules: true
-            - uses: conda-incubator/setup-miniconda@v3
-              with:
-                  miniconda-version: 'latest'
-                  auto-update-conda: true
-                  python-version: ${{ matrix.python-version }}
-                  environment-file: ${{ matrix.ymlfile }}
-                  activate-environment: qa4sm_reader # todo: must match with name in environment.yml
-                  auto-activate-base: false
-            - name: Print environment infos
-              shell: cmd
-              run: |
-                  conda info -a
-                  conda list
-                  pip list
-                  where pip
-                  where python
-            - name: Export Environment
-              shell: cmd
-              run: |
-                  mkdir artifacts
-                  set filename=env_py${{ matrix.python-version }}_${{ matrix.os }}.yml
-                  conda env export --no-builds | findstr /v "prefix" > artifacts/%filename%
             - name: Upload Artifacts
               uses: actions/upload-artifact@v4
               with:
                   name: Artifacts-py${{ matrix.python-version }}-${{ matrix.os }}
                   path: artifacts/*
+
             - name: Install package and test
-              shell: cmd
+              shell: bash -l {0}
               run: |
-                  conda activate qa4sm_reader
                   pip install -e .
                   pytest
+
             - name: Upload Coverage
-              shell: cmd
+              shell: bash -l {0}
               run: |
                   pip install coveralls && coveralls --service=github
               env:
@@ -124,7 +80,7 @@ jobs:
 
     coveralls:
         name: Submit Coveralls 👚
-        needs: [linux-tests, windows-tests]
+        needs: build
         runs-on: ubuntu-latest
         container: python:3-slim
         steps:
