@@ -1,5 +1,5 @@
 # This workflow will install Python dependencies and run tests on
-# windows and linux systems with a variety of Python versions
+# Windows and Linux systems with a variety of Python versions
 
 name: tests
 
@@ -11,7 +11,7 @@ on:
         - cron: '0 0 * * *' # daily
 
 jobs:
-    linux-tests:
+    build:
         name: Build py${{ matrix.python-version }} @ ${{ matrix.os }} 🐍
         runs-on: ${{ matrix.os }}
         strategy:
@@ -19,6 +19,11 @@ jobs:
                 python-version: ['3.8', '3.9', '3.10']
                 os: ['ubuntu-latest']
                 ymlfile: ['environment.yml']
+                include:
+                    - os: 'windows-latest'
+                      python-version: '3.10'
+                      ymlfile: 'environment.yml'
+
         steps:
             - uses: actions/checkout@v2
               with:
@@ -27,23 +32,39 @@ jobs:
             - uses: mamba-org/setup-micromamba@v1
               with:
                   micromamba-version: 'latest'
-                  environment-file: ${{ matrix.ymlfile }} # Ensure the env file is correctly defined
                   micromamba-root-path: ~/micromamba # Optional, where to install micromamba
 
-            - name: Initialize micromamba environment
+            - name: Initialize micromamba environment (Linux)
+              if: runner.os == 'Linux'
               shell: bash -l {0}
               run: |
                   micromamba shell init -s bash -p ~/micromamba/envs/qa4sm_reader
+                  micromamba create -y --name qa4sm_reader --file ${{ matrix.ymlfile }}
                   echo "source ~/micromamba/etc/profile.d/micromamba.sh" >> ~/.bashrc
 
-            - name: Create and activate environment
+            - name: Initialize micromamba environment (Windows)
+              if: runner.os == 'Windows'
+              shell: cmd
+              run: |
+                  micromamba shell init -s cmd -p %USERPROFILE%\micromamba\envs\qa4sm_reader
+                  micromamba create -y --name qa4sm_reader --file %USERPROFILE%\micromamba\envs\qa4sm_reader\${{ matrix.ymlfile }}
+
+            - name: Activate environment (Linux)
+              if: runner.os == 'Linux'
               shell: bash -l {0}
               run: |
                   source ~/micromamba/etc/profile.d/micromamba.sh
-                  micromamba create -y --name qa4sm_reader --file ${{ matrix.ymlfile }}
                   micromamba activate qa4sm_reader
 
-            - name: Print environment infos
+            - name: Activate environment (Windows)
+              if: runner.os == 'Windows'
+              shell: cmd
+              run: |
+                  call %USERPROFILE%\micromamba\etc\profile.d\micromamba.cmd
+                  micromamba activate qa4sm_reader
+
+            - name: Print environment infos (Linux)
+              if: runner.os == 'Linux'
               shell: bash -l {0}
               run: |
                   micromamba info
@@ -52,66 +73,8 @@ jobs:
                   which pip
                   which python
 
-            - name: Export Environment
-              shell: bash -l {0}
-              run: |
-                  mkdir -p artifacts
-                  filename=env_py${{ matrix.python-version }}_${{ matrix.os }}.yml
-                  micromamba env export --name qa4sm_reader > artifacts/$filename
-
-            - name: Upload Artifacts
-              uses: actions/upload-artifact@v4
-              with:
-                  name: Artifacts-py${{ matrix.python-version }}-${{ matrix.os }}
-                  path: artifacts/*
-
-            - name: Install package and test
-              shell: bash -l {0}
-              run: |
-                  pip install -e .
-                  pytest
-
-            - name: Upload Coverage
-              shell: bash -l {0}
-              run: |
-                  pip install coveralls && coveralls --service=github
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                  COVERALLS_FLAG_NAME: ${{ matrix.python-version }}
-                  COVERALLS_PARALLEL: true
-
-    windows-tests:
-        name: Build py${{ matrix.python-version }} @ ${{ matrix.os }} 🐍
-        runs-on: ${{ matrix.os }}
-        strategy:
-            matrix:
-                python-version: ['3.10']
-                os: ['windows-latest']
-                ymlfile: ['environment.yml']
-        steps:
-            - uses: actions/checkout@v2
-              with:
-                  submodules: true
-
-            - uses: mamba-org/setup-micromamba@v1
-              with:
-                  micromamba-version: 'latest'
-                  environment-file: ${{ matrix.ymlfile }} # Ensure the env file is correctly defined
-                  micromamba-root-path: ~/micromamba # Optional, where to install micromamba
-
-            - name: Initialize micromamba environment
-              shell: cmd
-              run: |
-                  micromamba shell init -s cmd -p %USERPROFILE%\micromamba\envs\qa4sm_reader
-
-            - name: Create and activate environment
-              shell: cmd
-              run: |
-                  call %USERPROFILE%\micromamba\etc\profile.d\micromamba.cmd
-                  micromamba create -y --name qa4sm_reader --file %USERPROFILE%\micromamba\envs\qa4sm_reader\${{ matrix.ymlfile }}
-                  micromamba activate qa4sm_reader
-
-            - name: Print environment infos
+            - name: Print environment infos (Windows)
+              if: runner.os == 'Windows'
               shell: cmd
               run: |
                   micromamba info
@@ -120,7 +83,16 @@ jobs:
                   where pip
                   where python
 
-            - name: Export Environment
+            - name: Export Environment (Linux)
+              if: runner.os == 'Linux'
+              shell: bash -l {0}
+              run: |
+                  mkdir -p artifacts
+                  filename=env_py${{ matrix.python-version }}_${{ matrix.os }}.yml
+                  micromamba env export --name qa4sm_reader > artifacts/$filename
+
+            - name: Export Environment (Windows)
+              if: runner.os == 'Windows'
               shell: cmd
               run: |
                   mkdir artifacts
@@ -131,15 +103,34 @@ jobs:
               uses: actions/upload-artifact@v4
               with:
                   name: Artifacts-py${{ matrix.python-version }}-${{ matrix.os }}
-                  path: artifacts\*
+                  path: artifacts/*
 
-            - name: Install package and test
+            - name: Install package and test (Linux)
+              if: runner.os == 'Linux'
+              shell: bash -l {0}
+              run: |
+                  pip install -e .
+                  pytest
+
+            - name: Install package and test (Windows)
+              if: runner.os == 'Windows'
               shell: cmd
               run: |
                   pip install -e .
                   pytest
 
-            - name: Upload Coverage
+            - name: Upload Coverage (Linux)
+              if: runner.os == 'Linux'
+              shell: bash -l {0}
+              run: |
+                  pip install coveralls && coveralls --service=github
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  COVERALLS_FLAG_NAME: ${{ matrix.python-version }}
+                  COVERALLS_PARALLEL: true
+
+            - name: Upload Coverage (Windows)
+              if: runner.os == 'Windows'
               shell: cmd
               run: |
                   pip install coveralls && coveralls --service=github
@@ -150,7 +141,7 @@ jobs:
 
     coveralls:
         name: Submit Coveralls 👚
-        needs: [linux-tests, windows-tests]
+        needs: build
         runs-on: ubuntu-latest
         container: python:3-slim
         steps:
