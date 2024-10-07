@@ -1,5 +1,5 @@
 # This workflow will install Python dependencies and run tests on
-# Windows and Linux systems with a variety of Python versions
+# windows and linux systems with a variety of Python versions
 
 # For more information see:
 # https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
@@ -30,70 +30,38 @@ jobs:
             - uses: actions/checkout@v2
               with:
                   submodules: true
-
-            - uses: mamba-org/setup-micromamba@v1
+            - uses: conda-incubator/setup-miniconda@v3
               with:
-                  micromamba-version: 'latest'
+                  miniconda-version: 'latest'
+                  auto-update-conda: true
+                  python-version: ${{ matrix.python-version }}
                   environment-file: ${{ matrix.ymlfile }}
-                  micromamba-root-path: ~/micromamba
-
-            - name: Initialize micromamba environment
-              shell: bash -l {0}
-              run: |
-                  if [ "${{ runner.os }}" == "Linux" ]; then
-                    micromamba shell init -s bash -p ~/micromamba/envs/qa4sm_reader
-                    micromamba create -y --name qa4sm_reader --file ${{ matrix.ymlfile }}
-                    echo "source ~/micromamba/etc/profile.d/micromamba.sh" >> ~/.bashrc
-                  else
-                    echo "set PATH=%PATH%;%USERPROFILE%\micromamba\bin" >> $GITHUB_ENV
-                    micromamba shell init -s cmd -p %USERPROFILE%\micromamba\envs\qa4sm_reader
-                    micromamba create -y --name qa4sm_reader --file %USERPROFILE%\micromamba\envs\qa4sm_reader\${{ matrix.ymlfile }}
-                  fi
-
-            - name: Activate environment
-              shell: bash -l {0}
-              run: |
-                  if [ "${{ runner.os }}" == "Linux" ]; then
-                    source ~/micromamba/etc/profile.d/micromamba.sh
-                    micromamba activate qa4sm_reader
-                  else
-                    call %USERPROFILE%\micromamba\etc\profile.d\micromamba.cmd
-                    micromamba activate qa4sm_reader
-                  fi
-
+                  activate-environment: qa4sm_reader # todo: must match with name in environment.yml
+                  auto-activate-base: false
             - name: Print environment infos
               shell: bash -l {0}
               run: |
-                  micromamba info
-                  micromamba list
+                  conda info -a
+                  conda list
                   pip list
-                  if [ "${{ runner.os }}" == "Linux" ]; then
-                    which pip
-                    which python
-                  else
-                    where pip
-                    where python
-                  fi
-
+                  which pip
+                  which python
             - name: Export Environment
               shell: bash -l {0}
               run: |
                   mkdir -p artifacts
                   filename=env_py${{ matrix.python-version }}_${{ matrix.os }}.yml
-                  micromamba env export --name qa4sm_reader > artifacts/$filename
-
+                  conda env export --no-builds | grep -v "prefix" > artifacts/$filename
             - name: Upload Artifacts
               uses: actions/upload-artifact@v4
               with:
                   name: Artifacts-py${{ matrix.python-version }}-${{ matrix.os }}
                   path: artifacts/*
-
             - name: Install package and test
               shell: bash -l {0}
               run: |
                   pip install -e .
                   pytest
-
             - name: Upload Coverage
               shell: bash -l {0}
               run: |
@@ -102,7 +70,6 @@ jobs:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   COVERALLS_FLAG_NAME: ${{ matrix.python-version }}
                   COVERALLS_PARALLEL: true
-
     coveralls:
         name: Submit Coveralls 👚
         needs: build
