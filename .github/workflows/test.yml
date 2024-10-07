@@ -96,26 +96,26 @@ jobs:
             - name: Install Micromamba
               shell: cmd
               run: |
-                  curl -Ls https://micromamba.snakepit.net/api/micromamba/win-64/latest | tar -xvj -C %USERPROFILE%\micromamba\bin
-                  set PATH=%USERPROFILE%\micromamba\bin;%PATH%
+                  curl -Ls https://micromamba.snakepit.net/api/micromamba/win-64/latest | tar -xvj -C C:\micromamba\bin
+                  set PATH=C:\micromamba\bin;%PATH%
                   micromamba --version
 
             - uses: mamba-org/setup-micromamba@v1
               with:
                   micromamba-version: 'latest'
                   environment-file: ${{ matrix.ymlfile }}
-                  micromamba-root-path: %USERPROFILE%\micromamba
+                  micromamba-root-path: C:\micromamba
 
             - name: Initialize micromamba environment
               shell: cmd
               run: |
-                  micromamba shell init -s cmd -p %USERPROFILE%\micromamba\envs\qa4sm_reader
+                  micromamba shell init -s cmd -p C:\micromamba\envs\qa4sm_reader
 
             - name: Create and activate environment
               shell: cmd
               run: |
-                  call %USERPROFILE%\micromamba\etc\profile.d\micromamba.cmd
-                  micromamba create -y --name qa4sm_reader --file %USERPROFILE%\micromamba\envs\qa4sm_reader\${{ matrix.ymlfile }}
+                  call C:\micromamba\etc\profile.d\micromamba.cmd
+                  micromamba create -y --name qa4sm_reader --file C:\micromamba\envs\qa4sm_reader\${{ matrix.ymlfile }}
                   micromamba activate qa4sm_reader
 
             - name: Print environment infos
