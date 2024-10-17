@@ -150,13 +150,13 @@ def plot_all(filepath: str,
     metrics_not_to_plot = list(set(chain(globals._metadata_exclude, globals.metric_groups[3], ['n_obs']))) # metadata, tcol metrics, n_obs
     if globals.DEFAULT_TSW in periods and len(periods) > 1:
         cbp = QA4SMCompPlotter(filepath)
-        if not os.path.isdir(os.path.join(out_dir, 'comparison_boxplots')):
-            os.makedirs(os.path.join(out_dir, 'comparison_boxplots'))
+        if not os.path.isdir(os.path.join(out_dir, globals.CLUSTERED_BOX_PLOT_OUTDIR)):
+            os.makedirs(os.path.join(out_dir, globals.CLUSTERED_BOX_PLOT_OUTDIR))
 
         for available_metric in cbp.metric_kinds_available:
             if available_metric in metrics.keys(
             ) and available_metric not in metrics_not_to_plot:
-                spth = [Path(out_dir) / 'comparison_boxplots' /
+                spth = [Path(out_dir) / globals.CLUSTERED_BOX_PLOT_OUTDIR /
                         f'{globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=available_metric, filetype=_out_type)}'
                         for _out_type in out_type]
                 _fig = cbp.plot_cbp(
@@ -192,3 +192,4 @@ def get_img_stats(
     table = img.stats_df()
 
     return table
+
