@@ -670,12 +670,12 @@ def _make_cbar(fig,
     if label is None:
         label = globals._metric_name[metric] + \
                 globals._metric_description[metric].format(
-                    globals.get_metric_units(ref_short, metric)
+                    globals.get_metric_units(ref_short)
                 )
         if scl_short:
             label = globals._metric_name[metric] + \
                     globals._metric_description[metric].format(
-                        globals.get_metric_units(scl_short, metric)
+                        globals.get_metric_units(scl_short)
                     )
 
     extend = get_extend_cbar(metric)

@@ -194,7 +194,7 @@ _diff_colormaps = {  # from /qa4sm/validator/validation/graphics.py
 
 # METRICS AND VARIABLES DEFINITIONS
 # =====================================================
-# common metrics, pairwise metrics (2 datasets), triple metrics (TC, 3 datasets), pairwise stability metrics(2 datasets)
+# common metrics, pairwise metrics (2 datasets), triple metrics (TC, 3 datasets), pairwise stability metrics (2 datasets)
 metric_groups = {
     'common': ['n_obs'],
     'pairwise': [
@@ -304,14 +304,14 @@ _metric_description = {  # from /qa4sm/validator/validation/graphics.py
     'err_std': ' in {}',
     'beta': ' in {}',
     'status': '',
-    'slopeR': '',
-    'slopeURMSD': ' in {}',
-    'slopeBIAS': ' in {}',
+    'slopeR': ' per decade',
+    'slopeURMSD': ' in {} per decade',
+    'slopeBIAS': ' in {} per decade',
 }
 
 
 # units for all datasets
-def get_metric_units(dataset, metric=None, raise_error=False):
+def get_metric_units(dataset, raise_error=False):
     # function to get m.u. with possibility to raise error
     _metric_units = {  # from /qa4sm/validator/validation/graphics.py
         'ISMN': 'm³/m³',
@@ -348,9 +348,6 @@ def get_metric_units(dataset, metric=None, raise_error=False):
                 UserWarning
             )
             return "n.a."
-
-    if metric in STABILITY_METRICS:
-        unit += ' per decade'
 
     return unit
 
@@ -837,8 +834,6 @@ def add_annual_subwindows(years):
     TEMPORAL_SUB_WINDOWS["custom"] = annual_subwindows
 
 
-#years = [2008, 2009, 2010]
-#add_annual_subwindows(years)
 
 CLUSTERED_BOX_PLOT_STYLE = {
     'fig_params': {
