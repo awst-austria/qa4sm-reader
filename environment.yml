@@ -13,7 +13,6 @@ dependencies:
 - h5netcdf
 - pip
 - pip:
-    - cftime
     - parse
     - colorcet
     - scipy
