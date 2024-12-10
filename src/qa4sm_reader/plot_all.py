@@ -203,4 +203,3 @@ def get_img_stats(
     table = img.stats_df()
 
     return table
-

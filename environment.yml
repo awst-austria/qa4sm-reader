@@ -6,7 +6,7 @@ dependencies:
 - xarray
 - netcdf4
 - pandas
-- numpy
+- numpy<2
 - matplotlib
 - cartopy>=0.21
 - pyproj
