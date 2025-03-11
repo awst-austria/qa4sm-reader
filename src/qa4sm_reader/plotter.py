@@ -19,7 +19,7 @@ from matplotlib.patches import Rectangle
 from qa4sm_reader.img import QA4SMImg
 import qa4sm_reader.globals as globals
 from qa4sm_reader import plotting_methods as plm
-from qa4sm_reader.plotting_methods import ClusteredBoxPlot, patch_styling
+from qa4sm_reader.plotting_methods import ClusteredBoxPlot, patch_styling, scale_figure_for_network_metadata_plot
 from qa4sm_reader.exceptions import PlotterError
 import qa4sm_reader.handlers as hdl
 from qa4sm_reader.utils import note, filter_out_self_combination_tcmetric_vars
@@ -119,7 +119,7 @@ class QA4SMPlotter:
         ds_parts = []
         id, meta = mds_meta
         if tc:
-            id, meta = other_meta   # show name of the OTHER dataset
+            id, meta = other_meta  # show name of the OTHER dataset
         if short_caption:
             ds_parts.append(
                 f"{id}-{meta['pretty_name']} ({meta['pretty_version']})")
@@ -414,13 +414,13 @@ class QA4SMPlotter:
 
         # fig.tight_layout()
 
-        plm.add_logo_to_figure(fig = fig,
-                               logo_path = globals.watermark_logo_pth,
-                               position = globals.watermark_logo_position,
-                               offset = globals.watermark_logo_offset_box_plots,
-                               scale = globals.watermark_logo_scale,
-                               )
-
+        plm.add_logo_to_figure(
+            fig=fig,
+            logo_path=globals.watermark_logo_pth,
+            position=globals.watermark_logo_position,
+            offset=globals.watermark_logo_offset_box_plots,
+            scale=globals.watermark_logo_scale,
+        )
 
         return fig, ax
 
@@ -465,14 +465,17 @@ class QA4SMPlotter:
         ax.set_title(title, pad=globals.title_pad)
 
         # add watermark
-        plm.add_logo_to_figure(fig = fig,
-                               logo_path = globals.watermark_logo_pth,
-                               position = globals.watermark_logo_position,
-                               offset = globals.watermark_logo_offset_bar_plots,
-                               scale = globals.watermark_logo_scale,
-                               )
+        plm.add_logo_to_figure(
+            fig=fig,
+            logo_path=globals.watermark_logo_pth,
+            position=globals.watermark_logo_position,
+            offset=globals.watermark_logo_offset_bar_plots,
+            scale=globals.watermark_logo_scale,
+        )
 
-    def _save_plot(self, out_name: str, out_types: Optional[Union[List[str], str]] = 'png') -> list:
+    def _save_plot(self,
+                   out_name: str,
+                   out_types: Optional[Union[List[str], str]] = 'png') -> list:
         """
         Save plot with name to self.out_dir
 
@@ -764,7 +767,8 @@ class QA4SMPlotter:
             metric=metric,
             ref_short=ref_meta[1]['short_name'],
             ref_grid_stepsize=ref_grid_stepsize,
-            plot_extent=None,  # if None, extent is automatically adjusted (as opposed to img.extent)
+            plot_extent=
+            None,  # if None, extent is automatically adjusted (as opposed to img.extent)
             scl_short=scl_short,
             **style_kwargs)
 
@@ -802,12 +806,13 @@ class QA4SMPlotter:
         # use title for plot, make watermark
         ax.set_title(title, pad=globals.title_pad)
 
-        plm.add_logo_to_figure(fig = fig,
-                               logo_path = globals.watermark_logo_pth,
-                               position = globals.watermark_logo_position,
-                               offset = globals.watermark_logo_offset_map_plots,
-                               scale = globals.watermark_logo_scale,
-                               )
+        plm.add_logo_to_figure(
+            fig=fig,
+            logo_path=globals.watermark_logo_pth,
+            position=globals.watermark_logo_position,
+            offset=globals.watermark_logo_offset_map_plots,
+            scale=globals.watermark_logo_scale,
+        )
 
         # save file or just return the image
         if save_files:
@@ -845,7 +850,8 @@ class QA4SMPlotter:
         fnames = []
         for Var in self.img._iter_vars(type="metric",
                                        filter_parms={"metric": metric}):
-            if len(self.img.triple) and Var.g == 'pairwise' and metric == 'status':
+            if len(self.img.triple
+                   ) and Var.g == 'pairwise' and metric == 'status':
                 continue
             if not (np.isnan(Var.values.to_numpy()).all() or Var.is_CI):
                 fns = self.mapplot_var(Var,
@@ -884,7 +890,7 @@ class QA4SMPlotter:
         """
         fnames_bplot = None
         Metric = self.img.metrics[metric]
-        
+
         fnames_mapplot = None
         if Metric.name == 'status':
             fnames_bplot = self.barplot(metric='status',
@@ -909,7 +915,7 @@ class QA4SMPlotter:
                                                  period=period,
                                                  out_types=out_types,
                                                  save_files=save_all,
-                                                 **plotting_kwargs)            
+                                                 **plotting_kwargs)
 
         return fnames_bplot, fnames_mapplot
 
@@ -982,7 +988,6 @@ class QA4SMPlotter:
             else:
                 colmean = values.pop(col).mean(axis=1, skipna=True)
                 values[col] = colmean
-
 
         out = plm.boxplot_metadata(df=values,
                                    metadata_values=meta_values,
@@ -1140,12 +1145,18 @@ class QA4SMPlotter:
 
         fig.subplots_adjust(bottom=0.2)
 
-        plm.add_logo_to_figure(fig = fig,
-                               logo_path = globals.watermark_logo_pth,
-                               position = globals.watermark_logo_position,
-                               offset = globals.watermark_logo_offset_metadata_plots,
-                               scale = globals.watermark_logo_scale,
-                               )
+        watermark_scale = globals.watermark_logo_scale
+        if metadata == 'network':
+            fig, ax, watermark_scale = scale_figure_for_network_metadata_plot(
+                fig=fig, ax=ax, watermark_scale=watermark_scale)
+
+        plm.add_logo_to_figure(
+            fig=fig,
+            logo_path=globals.watermark_logo_pth,
+            position=globals.watermark_logo_position,
+            offset=globals.watermark_logo_offset_metadata_plots,
+            scale=watermark_scale,
+        )
 
         if save_file:
             out_name = self._filenames_lut("metadata").format(
@@ -1231,6 +1242,7 @@ class QA4SMPlotter:
         table.to_csv(path_or_buf=filepath)
 
         return filepath
+
 
 #$$
 class QA4SMCompPlotter:
@@ -1373,10 +1385,10 @@ class QA4SMCompPlotter:
             pattern = globals.METRIC_TEMPLATE.format(
                 ds1=
                 r'(?P<ds1>\d+-\w+)',  # matches one or more digits (\d+), followed by a hyphen (-), \
-                                     # followed by one or more word characters (\w+)
+                # followed by one or more word characters (\w+)
                 ds2=
                 r'(?P<ds2>\d+-\w+)',  # matches one or more digits (\d+), followed by a hyphen (-), \
-                                     # followed by one or more word characters (\w+)
+                # followed by one or more word characters (\w+)
             )
 
             match = re.search(pattern, metric_string)
@@ -1432,8 +1444,8 @@ class QA4SMCompPlotter:
         """
 
         temp_sub_wins_names = [
-            tsw
-            for tsw in self.ds.coords[globals.TEMPORAL_SUB_WINDOW_NC_COORD_NAME].values
+            tsw for tsw in self.ds.coords[
+                globals.TEMPORAL_SUB_WINDOW_NC_COORD_NAME].values
             if tsw != globals.DEFAULT_TSW
         ]
 
@@ -1501,8 +1513,7 @@ class QA4SMCompPlotter:
     @staticmethod
     @note(
         "This method is redundant, as it yields the same result as `QA4SMCompPlotter.tsws_used()`. \
-        It is kept as a static method for debugging purposes."
-    )
+        It is kept as a static method for debugging purposes.")
     def get_tsws_from_df(df: pd.DataFrame) -> List[str]:
         """
         Get all temporal sub-windows used in the validation from a DataFrame as returned by \
@@ -1688,10 +1699,12 @@ class QA4SMCompPlotter:
 
             yield Var
 
-    def plot_cbp(self,
-                 chosen_metric: str,
-                 stability: bool,
-                 out_name: Optional[Union[List, List[str]]] = None) -> matplotlib.figure.Figure:
+    def plot_cbp(
+        self,
+        chosen_metric: str,
+        stability: bool,
+        out_name: Optional[Union[List, List[str]]] = None
+    ) -> matplotlib.figure.Figure:
         """
         Plot a Clustered Boxplot for a chosen metric
 
@@ -1709,6 +1722,7 @@ class QA4SMCompPlotter:
 
         """
         anchor_list = None
+
         def get_metric_vars(
                 generic_metric: str) -> Dict[str, hdl.MetricVariable]:
             _dict = {}
@@ -1738,6 +1752,7 @@ class QA4SMCompPlotter:
                     unit=Var.metric_ds[1]["mu"])
                 for Var in get_metric_vars(generic_metric).values()
             }
+
         def sanitize_dataframe(df: pd.DataFrame,
                                column_threshold: float = 0.1,
                                row_threshold_fraction: float = 0.8,
@@ -1798,19 +1813,20 @@ class QA4SMCompPlotter:
 
         legend_entries = get_legend_entries(cbp_obj=self.cbp,
                                             generic_metric=chosen_metric)
-        
+
         anchor_list = None
         if stability:
-             # get the first dataset to deduce the number of anchors - important for the boxplot setup
-             unique_groups = metric_df.columns.get_level_values(0).unique()           
-             first_df = metric_df.loc[:, metric_df.columns.get_level_values(0) == unique_groups[0]]
-             first_df = sanitize_dataframe(first_df, keep_empty_cols=False)
-             anchor_number = len(first_df.columns)
-             anchor_list = np.arange(anchor_number).astype(float)
+            # get the first dataset to deduce the number of anchors - important for the boxplot setup
+            unique_groups = metric_df.columns.get_level_values(0).unique()
+            first_df = metric_df.loc[:,
+                                     metric_df.columns.get_level_values(0) ==
+                                     unique_groups[0]]
+            first_df = sanitize_dataframe(first_df, keep_empty_cols=False)
+            anchor_number = len(first_df.columns)
+            anchor_list = np.arange(anchor_number).astype(float)
 
         if anchor_list is None:
             anchor_list = self.cbp.anchor_list
-
 
         centers_and_widths = self.cbp.centers_and_widths(
             anchor_list=anchor_list,
@@ -1831,17 +1847,19 @@ class QA4SMCompPlotter:
 
         legend_entries = get_legend_entries(cbp_obj=self.cbp,
                                             generic_metric=chosen_metric)
-        
+
         cbp_fig = self.cbp.figure_template(incl_median_iqr_n_axs=False,
                                            fig_kwargs=fig_kwargs)
-        
+
         legend_handles = []
         for dc_num, (dc_val_name, Var) in enumerate(Vars.items()):
             _df = Var.values  # get the dataframe for the specific metric, potentially with NaNs
             if not stability:
-                _df = sanitize_dataframe(_df, keep_empty_cols=True)  # sanitize the dataframe
+                _df = sanitize_dataframe(
+                    _df, keep_empty_cols=True)  # sanitize the dataframe
             else:
-                _df = sanitize_dataframe(_df, keep_empty_cols=False)  # remove redundant columns
+                _df = sanitize_dataframe(
+                    _df, keep_empty_cols=False)  # remove redundant columns
             bp = cbp_fig.ax_box.boxplot(
                 [_df[col] for col in _df.columns],
                 positions=centers_and_widths[dc_num].centers,
@@ -1884,11 +1902,10 @@ class QA4SMCompPlotter:
             ['legend_fontsize'],
             ncols=_ncols)
 
-        xtick_pos = self.cbp.centers_and_widths(
-            anchor_list=anchor_list,
-            no_of_ds=1,
-            space_per_box_cluster=0.7,
-            rel_indiv_box_width=0.8)
+        xtick_pos = self.cbp.centers_and_widths(anchor_list=anchor_list,
+                                                no_of_ds=1,
+                                                space_per_box_cluster=0.7,
+                                                rel_indiv_box_width=0.8)
         cbp_fig.ax_box.set_xticks([])
         cbp_fig.ax_box.set_xticklabels([])
         cbp_fig.ax_box.set_xticks(xtick_pos[0].centers)
@@ -1899,6 +1916,7 @@ class QA4SMCompPlotter:
                 f"{tsw[1]}\nEmpty" if count == 0 else f"{tsw[1]}"
                 for tsw, count in _count_dict.items()
             ]
+
         xtick_labels = get_xtick_labels(_df)
 
         if len(xtick_labels) > 19 and stability:
@@ -1923,31 +1941,39 @@ class QA4SMCompPlotter:
 
             try:
                 out = list({x for x in df.count() if x > 0})[0]
-            except IndexError: # if all values are NaN
+            except IndexError:  # if all values are NaN
                 out = 0
             return out
 
-        title = title[0:-2] + f'\n for the same {get_valid_gpis(_df)} out of {len(metric_df)} GPIs\n'
+        title = title[
+            0:
+            -2] + f'\n for the same {get_valid_gpis(_df)} out of {len(metric_df)} GPIs\n'
 
         cbp_fig.fig.suptitle(
             title,
             fontsize=globals.CLUSTERED_BOX_PLOT_STYLE['fig_params']
             ['title_fontsize'])
-        
+
         cbp_fig.ax_box.set_ylabel(
             self.create_label(Var),
             fontsize=globals.CLUSTERED_BOX_PLOT_STYLE['fig_params']
             ['y_labelsize'],
         )
 
-        spth = [Path(f"{globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric = chosen_metric, filetype = 'png')}")]
+        spth = [
+            Path(
+                f"{globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric = chosen_metric, filetype = 'png')}"
+            )
+        ]
         if out_name:
             spth = out_name
 
-        [cbp_fig.fig.savefig(
-            fname=outname,
-            dpi=fig_kwargs['dpi'],
-            bbox_inches=fig_kwargs['bbox_inches'],
-        ) for outname in spth]
+        [
+            cbp_fig.fig.savefig(
+                fname=outname,
+                dpi=fig_kwargs['dpi'],
+                bbox_inches=fig_kwargs['bbox_inches'],
+            ) for outname in spth
+        ]
 
         return cbp_fig.fig

@@ -68,6 +68,14 @@ watermark_logo_pth = os.path.join(
         os.path.abspath(__file__)), 'static', 'images', 'logo',
     'QA4SM_logo_long.png')
 
+# === metadata network defaults ===
+meta_network_base_font_size = 0.9
+meta_network_font_scale_rate = 0.03
+meta_network_boxplot_width = 12.6
+meta_network_width_scale_rate = 0.34
+meta_network_boxplot_height = 5
+meta_network_boxplot_height_scale_factor = 0.5
+meta_network_increase_padding_rate = 1.7
 
 # === filename template ===
 ds_fn_templ = "{i}-{ds}.{var}"
@@ -79,6 +87,7 @@ out_metadata_plots = {
     "climate": ["climate_KG"],
     "soil": ["instrument_depth", "soil_type"],
     "frm_class": ['frm_class'],
+    "network" : ['network'],
 }
 
 # === calculation errors (pytesmo) === #TODO: import from pytesmo

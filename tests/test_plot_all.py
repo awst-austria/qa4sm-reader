@@ -50,7 +50,7 @@ def test_plot_all(plotdir):
     )
 
     for tswp in temporal_sub_windows_present:
-        assert len(os.listdir(os.path.join(plotdir, tswp))) == 60
+        assert len(os.listdir(os.path.join(plotdir, tswp))) == 71
         assert all(os.path.splitext(file)[1] in [".png", ".csv"] for file in os.listdir(os.path.join(plotdir, tswp))), \
             "Not all files have been saved as .png or .csv"
 
