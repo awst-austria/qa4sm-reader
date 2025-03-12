@@ -1169,10 +1169,16 @@ def bin_discrete(
         groups.append(group)
     grouped = pd.concat(groups, axis=0)
     formatted = []
+    counts = grouped.groupby([meta_key, 'Dataset']).count()
     for meta, meta_df in grouped.groupby(meta_key).__iter__():
-        if meta_df["values"].count() < min_size:
-            continue
-        formatted.append(meta_df)
+        filtered_df = meta_df.copy()
+        # Filter rows based on whether their (network, dataset) combination meets the threshold
+        filtered_df = filtered_df[filtered_df.apply(
+            lambda row: counts.loc[(meta, row['Dataset'])]['values'] >= min_size,
+            axis=1
+        )]
+        if len(filtered_df):
+            formatted.append(filtered_df)
     # If too few points are available to make the plots
     if not formatted:
         return None
@@ -1454,6 +1460,35 @@ def bplot_catplot(to_plot,
         showfliers=False,
         orient=orient,
     )
+    
+    grouped = to_plot.groupby([metadata_name, "Dataset"])
+    single_obs_data = grouped.filter(lambda x: len(x) == 1)
+
+    # Only add points for single-observation groups
+    if not single_obs_data.empty:
+        num_patches = len(axis.patches)
+    
+        # Set size on a scale from 10 (when patches=5) to 4 (when patches=200 or more)
+        if num_patches <= 5:
+            point_size = 10
+        elif num_patches >= 200:
+            point_size = 7
+        else:
+            point_size = 10 - ((num_patches - 5) / (200 - 5)) * (10 - 7)
+        sns.stripplot(
+            x=x,
+            y=y,
+            hue="Dataset",
+            data=single_obs_data.set_index(np.arange(single_obs_data.index.size)),
+            palette="Set2",  # Same palette as boxplot
+            ax=axis,
+            size=point_size,         # Point size
+            dodge=True,     # This aligns the points with their respective boxes
+            jitter=False,   # Disable jitter to keep points centered
+            orient=orient,
+            legend=False    # Avoid duplicate legend
+        )
+
     n_bars = to_plot["Dataset"].nunique()
     n_meta = to_plot[metadata_name].nunique()
     unit_height = 1
@@ -1468,10 +1503,14 @@ def bplot_catplot(to_plot,
             globals.meta_network_boxplot_height +
             n_meta * globals.meta_network_boxplot_height_scale_factor
         ]
-        if n_meta > 33:  # change y-labels to one line
-            y_labels = [label.get_text() for label in box.get_yticklabels()]
-            y_labels_fixed = [label.replace("\n", ", ") for label in y_labels]
-            box.set_yticklabels(y_labels_fixed, fontsize=globals.tick_size)
+        if n_bars > 1:
+            scaling_factor = 1 + 2 * (n_bars - 1) / 4
+            dims[1] = dims[1] * scaling_factor
+        
+        # change y-labels to one line
+        y_labels = [label.get_text() for label in box.get_yticklabels()]
+        y_labels_fixed = [label.replace("\n", ", ") for label in y_labels]
+        box.set_yticklabels(y_labels_fixed, fontsize=globals.tick_size)
     if orient == "v":
         axis.set(xlabel=None, ylabel=y_axis)
         axis.yaxis.grid(True)  # Hide the horizontal gridlines
@@ -1993,7 +2032,7 @@ def scale_figure_for_network_metadata_plot(fig: "matplotlib.figure.Figure",
         The axes object containing the patches to consider for scaling.
     watermark_scale : float
         The initial watermark scale factor that will be modified.
-
+        
     Returns
     -------
     fig : matplotlib.figure.Figure
@@ -2003,9 +2042,17 @@ def scale_figure_for_network_metadata_plot(fig: "matplotlib.figure.Figure",
     scale : float
         The modified scale value.
     """
+    n_networks = len(ax.get_yticks())
+    patches_count = len(ax.patches) # For case when multiple datasets are validated
 
-    factor = globals.meta_network_base_font_size + len(
-        ax.patches) * globals.meta_network_font_scale_rate
+    base_factor = globals.meta_network_base_font_size +  n_networks * globals.meta_network_font_scale_rate
+
+    if patches_count > 50:
+        # Scale linearly from 0 at 50 patches to 0.4 at 200 patches
+        additional_scaling = 0.5 * (patches_count - 50) / (200 - 50)
+        factor = base_factor * (1 + additional_scaling)
+    else:
+        factor = base_factor
 
     suptitle_text = fig._suptitle
     suptitle_text.set_fontsize(suptitle_text.get_fontsize() * factor)
@@ -2025,12 +2072,19 @@ def scale_figure_for_network_metadata_plot(fig: "matplotlib.figure.Figure",
     for text in legend.get_texts():
         text.set_fontsize(text.get_fontsize() * factor)
 
-    fig.tight_layout(pad=3.5)
+    for patch in legend.get_patches():
+        patch_size = 1.0 * (factor * 0.75)  # Scale factor based on n_networks
+        patch.set_height(patch.get_height() * patch_size)
+
+    fig.tight_layout(pad=2 * factor)
     new_bottom = fig.subplotpars.bottom * globals.meta_network_increase_padding_rate
     fig.subplots_adjust(bottom=new_bottom)
 
     # scale is to adjust size of Watermark, decreased here with increased number of networks.
-    watermark_scale -= len(ax.patches) * 0.001
+    watermark_scale -= factor * 0.0116
+
+    if watermark_scale < 0:
+        watermark_scale = 0.05
 
     return fig, ax, watermark_scale
 

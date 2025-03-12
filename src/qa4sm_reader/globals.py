@@ -70,12 +70,12 @@ watermark_logo_pth = os.path.join(
 
 # === metadata network defaults ===
 meta_network_base_font_size = 0.9
-meta_network_font_scale_rate = 0.03
+meta_network_font_scale_rate = 0.04
 meta_network_boxplot_width = 12.6
 meta_network_width_scale_rate = 0.34
 meta_network_boxplot_height = 5
 meta_network_boxplot_height_scale_factor = 0.5
-meta_network_increase_padding_rate = 1.7
+meta_network_increase_padding_rate = 1.4
 
 # === filename template ===
 ds_fn_templ = "{i}-{ds}.{var}"
@@ -659,7 +659,7 @@ def get_resolution_info(dataset, raise_error=False):
 # information needed for plotting the metadata-boxplots
 
 # Min number of samples per bin to create a boxplot:
-meta_boxplot_min_samples = 5
+meta_boxplot_min_samples = 1
 
 lc_classes = {
     "unknown": "Not provided",
