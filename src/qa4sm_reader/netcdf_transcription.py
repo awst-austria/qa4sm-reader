@@ -8,7 +8,8 @@ import shutil
 import tempfile
 import sys
 from pathlib import Path
-
+from osgeo import gdal, osr
+import rioxarray
 from qa4sm_reader.intra_annual_temp_windows import TemporalSubWindowsCreator, InvalidTemporalSubWindowError
 from qa4sm_reader.globals import    METRICS, TC_METRICS, STABILITY_METRICS, NON_METRICS, METADATA_TEMPLATE, \
                                     IMPLEMENTED_COMPRESSIONS, ALLOWED_COMPRESSION_LEVELS, \
@@ -24,7 +25,6 @@ class TemporalSubWindowMismatchError(Exception):
         super().__init__(
             f'The temporal sub-windows provided ({provided}) do not match the ones present in the provided netCDF file ({expected}).'
         )
-
 
 
 class Pytesmo2Qa4smResultsTranscriber:
@@ -209,7 +209,7 @@ class Pytesmo2Qa4smResultsTranscriber:
         ]
         return any(
             tcol_metric_name.startswith(prefix) for prefix in valid_prefixes)
-    
+
     def is_valid_stability_metric_name(self, metric_name):
         """
         Checks if a given stability metric name is valid, based on the defined `globals.INTRA_ANNUAL_METRIC_TEMPLATE`.
@@ -294,12 +294,17 @@ class Pytesmo2Qa4smResultsTranscriber:
         For all variables starting with 'slope', replace all tsw values ('2010', '2011', etc.) with NaN 
         except for the default tsw.
         """
-        slope_vars = [var for var in self.transcribed_dataset if var.startswith("slope")]
+        slope_vars = [
+            var for var in self.transcribed_dataset if var.startswith("slope")
+        ]
 
         for var in slope_vars:
-            if TEMPORAL_SUB_WINDOW_NC_COORD_NAME in self.transcribed_dataset[var].dims:              
-                mask = self.transcribed_dataset[var][TEMPORAL_SUB_WINDOW_NC_COORD_NAME] == DEFAULT_TSW
-                self.transcribed_dataset[var] = self.transcribed_dataset[var].where(mask, other=np.nan)
+            if TEMPORAL_SUB_WINDOW_NC_COORD_NAME in self.transcribed_dataset[
+                    var].dims:
+                mask = self.transcribed_dataset[var][
+                    TEMPORAL_SUB_WINDOW_NC_COORD_NAME] == DEFAULT_TSW
+                self.transcribed_dataset[var] = self.transcribed_dataset[
+                    var].where(mask, other=np.nan)
 
     @staticmethod
     def update_dataset_var(ds: xr.Dataset, var: str, coord_key: str,
@@ -594,7 +599,8 @@ class Pytesmo2Qa4smResultsTranscriber:
                         'complevel': complevel
                     }
                     for var in ds.variables
-                    if not np.issubdtype(ds[var].dtype, np.object_) and ds[var].dtype.kind in {'i', 'u', 'f'}
+                    if not np.issubdtype(ds[var].dtype, np.object_)
+                    and ds[var].dtype.kind in {'i', 'u', 'f'}
                 }
 
             try:
@@ -746,14 +752,13 @@ class Pytesmo2Qa4smResultsTranscriber:
                     if tsw not in month_order and tsw not in seasons_1_order
                     and tsw not in seasons_2_order
                 ]
-                return customs, list(set(tsw_list) - set(customs))          
+                return customs, list(set(tsw_list) - set(customs))
 
             custom_tsws, tsw_list = get_custom_tsws(tsw_list)
-            
+
             if all(tsw.isdigit() for tsw in custom_tsws):
                 custom_tsws = sorted(custom_tsws, key=int)
 
-            
             lens = {len(tsw) for tsw in tsw_list}
 
             if lens == {2} and all(
@@ -784,6 +789,119 @@ class Pytesmo2Qa4smResultsTranscriber:
             tsws = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_pytesmo_ncfile(
                 ncfile)
         return sort_tsws(tsws)
+
+
+class Qa4smResults2GeoTiffTranscriber:
+    """
+    Transcriber for converting QA4SM results to GeoTIFF format.
+    
+    Optimized for scenarios where the dataset is already in memory.
+    """
+
+    def __init__(self, dataset, nc_filepath, out_dir):
+        """
+        Initialize the transcriber.
+        
+        Parameters
+        ----------
+        dataset : xarray.Dataset
+            The in-memory dataset to be converted
+        nc_filepath : Path or str
+            Original image filepath (used for naming output)
+        out_dir : Path or str
+            Directory where GeoTIFF files will be saved
+        """
+        self.ds = dataset
+        self.nc_filepath = Path(nc_filepath)
+        self.out_dir = Path(out_dir)
+        self.geotiff_filepath = self.out_dir / f"{self.nc_filepath.stem}.tif"
+
+    def save_geotiff(self):
+        """
+        Save data for the specified period as GeoTIFF.
+        
+        Returns
+        -------
+        str
+            Path to the saved GeoTIFF file
+        """
+
+        variables_to_export = [
+            x for x in self.ds.data_vars if x not in ['gpi']
+        ]
+
+        ref_da = self.ds[variables_to_export[0]].set_index(
+            loc=['lat', 'lon']).unstack('loc')
+        ref_da = ref_da.rio.write_crs("EPSG:4326", inplace=False)
+
+        # drop variable idx (timeseries_id)
+        ref_da = ref_da.drop('idx')
+
+        # Reproject the reference array to EPSG:3857.
+        ref_da_3857 = ref_da.rio.reproject("EPSG:3857")
+
+        # Get the GDAL transform and new dimensions.
+        transform = ref_da_3857.rio.transform().to_gdal()
+        ncols, nrows = ref_da_3857.rio.width, ref_da_3857.rio.height
+
+        # Create the multi-band GeoTIFF with the number of bands equal to the number of variables.
+        driver = gdal.GetDriverByName("GTiff")
+        out_ds = driver.Create(str(self.geotiff_filepath),
+                               ncols,
+                               nrows,
+                               len(variables_to_export),
+                               gdal.GDT_Float32,
+                               options=[
+                                   "COMPRESS=ZSTD", "TILED=YES",
+                                   "BLOCKXSIZE=256", "BLOCKYSIZE=256"
+                               ])
+        if out_ds is None:
+            raise RuntimeError(f"Could not create {self.geotiff_filepath}")
+
+        # Set geotransform and projection to EPSG:3857.
+        out_ds.SetGeoTransform(transform)
+        srs = osr.SpatialReference()
+        srs.ImportFromEPSG(3857)
+        out_ds.SetProjection(srs.ExportToWkt())
+
+        # Loop over variables, reproject each to EPSG:3857, and write each as a band.
+        for idx, var in enumerate(variables_to_export, start=1):
+            print(f"Processing variable: {var}")
+            da = self.ds[var].set_index(loc=['lat', 'lon']).unstack('loc')
+
+            da = da.drop('idx')
+            da = da.rio.write_crs("EPSG:4326", inplace=False)
+
+            # Reproject to EPSG:3857. You can adjust the resampling method if needed.
+            da_3857 = da.rio.reproject("EPSG:3857")
+
+            # Convert to float32 for GDAL.
+            band_data = da_3857.values.astype(np.float32)
+            band = out_ds.GetRasterBand(idx)
+            band.WriteArray(band_data)
+            band.SetDescription(var)
+
+        # Flush and close the dataset.
+        out_ds.FlushCache()
+        del out_ds
+
+        print(f"Saved multi-band GeoTIFF to {self.geotiff_filepath}")
+
+        # Optionally, build overviews.
+        ds_gdal = gdal.Open(str(self.geotiff_filepath), gdal.GA_Update)
+        if ds_gdal is None:
+            raise RuntimeError(
+                f"Could not open {self.geotiff_filepath} for update.")
+
+        overview_levels = [2, 4, 6, 8]
+        result = ds_gdal.BuildOverviews("GAUSS", overview_levels)
+        if result != 0:
+            raise RuntimeError("Building overviews failed.")
+
+        print("Overviews built successfully.")
+
+        print(f"Saved GeoTIFF to {self.geotiff_filepath}")
+        return self.geotiff_filepath
 
 
 if __name__ == '__main__':

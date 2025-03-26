@@ -5,7 +5,7 @@ from typing import Union, List, Tuple, Dict
 from itertools import chain
 
 import pandas as pd
-from qa4sm_reader.netcdf_transcription import Pytesmo2Qa4smResultsTranscriber
+from qa4sm_reader.netcdf_transcription import Pytesmo2Qa4smResultsTranscriber, Qa4smResults2GeoTiffTranscriber
 from qa4sm_reader.plotter import QA4SMPlotter, QA4SMCompPlotter
 from qa4sm_reader.img import QA4SMImg
 import qa4sm_reader.globals as globals
@@ -14,37 +14,43 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 
-def plot_all(filepath: str,
-             temporal_sub_windows: List[str] = None,
-             metrics: list = None,
-             extent: tuple = None,
-             out_dir: str = None,
-             out_type: str = 'png',
-             save_all: bool = True,
-             save_metadata: Union[str, bool] = 'never',
-             save_csv: bool = True,
-             engine: str = 'h5netcdf',
-             **plotting_kwargs) -> Tuple[List[str], List[str], List[str], List[str]]:
+def plot_all(
+        filepath: str,
+        temporal_sub_windows: List[str] = None,
+        metrics: list = None,
+        extent: tuple = None,
+        out_dir: str = None,
+        out_type: str = 'png',
+        save_all: bool = True,
+        save_geotiff: bool = True,
+        save_metadata: Union[str, bool] = 'never',
+        save_csv: bool = True,
+        engine: str = 'h5netcdf',
+        **plotting_kwargs
+) -> Tuple[List[str], List[str], List[str], List[str]]:
     """
     Creates boxplots for all metrics and map plots for all variables.
     Saves the output in a folder-structure.
 
     Parameters
     ----------
-    filepath : str
+    filepath: str
         path to the *.nc file to be processed.
     temporal_sub_windows : List[str], optional (default: None)
         List of temporal sub-windows to be processed. If None, all periods present are automatically extracted from the file.
-    metrics : set or list, optional (default: None)
+    metrics: set or list, optional (default: None)
         metrics to be plotted. If None, all metrics with data are plotted
-    extent : tuple, optional (default: None)
+    extent: tuple, optional (default: None)
         Area to subset the values for -> (min_lon, max_lon, min_lat, max_lat)
-    out_dir : str, optional (default: None)
+    out_dir: str, optional (default: None)
         Path to output generated plot. If None, defaults to the current working directory.
     out_type: str or list
         extensions which the files should be saved in
     save_all: bool, optional (default: True)
         all plotted images are saved to the output directory
+    save_geotiff: bool, optional (default: True)
+        netcdf file is transformed into additional geo_tiff with all variables, 
+        with added pyramid layers for the tile creation of interactive maps in EPSG3857
     save_metadata: str or bool, optional (default: 'never')
         for each metric, metadata plots are provided
         (see plotter.QA4SMPlotter.plot_save_metadata)
@@ -55,7 +61,7 @@ def plot_all(filepath: str,
                                of points is above the `meta_boxplot_min_size`
                                threshold from globals.py. Otherwise a warning
                                is printed.
-    save_csv: bool, optional. Default is True.
+    save_csv: bool, optional (default: True)
         save a .csv file with the validation statistics
     engine: str, optional (default: h5netcdf)
         Engine used by xarray to read data from file. For qa4sm this should
@@ -72,7 +78,6 @@ def plot_all(filepath: str,
         list of filenames for created comparison boxplots
     """
 
-
     if isinstance(save_metadata, bool):
         if not save_metadata:
             save_metadata = 'never'
@@ -87,14 +92,15 @@ def plot_all(filepath: str,
                          f"but `{save_metadata}` was passed.")
 
     # initialise image and plotter
-    fnames_bplot, fnames_mapplot, fnames_csv = [], [], []
+    fnames_bplot, fnames_mapplot, fnames_csv, fnames_geotiff = [], [], [], []
 
     comparison_periods = None
     if temporal_sub_windows is None:
-        periods = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(filepath)
+        periods = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(
+            filepath)
     else:
         periods = np.array(temporal_sub_windows)
-    # Filter out all items that are purely digits 
+    # Filter out all items that are purely digits
     # Needs to be here because when qa4sm-validaion is run the temporal_sub_windows is not None
     comparison_periods = periods
     periods = [period for period in periods if not period.isdigit()]
@@ -114,6 +120,17 @@ def plot_all(filepath: str,
 
         if metrics is None:
             metrics = img.metrics
+
+        if save_geotiff:
+            geotiff_transcriber = Qa4smResults2GeoTiffTranscriber(
+                dataset=img.ds,
+                nc_filepath=filepath,
+                out_dir=Path(out_dir) /
+                str(period) if period else Path(out_dir))
+
+            # Call the save_geotiff method on the instance
+            out_geotiff = geotiff_transcriber.save_geotiff()
+            fnames_geotiff.append(out_geotiff)
 
         # iterate metrics and create files in output directory
         for metric in metrics:
@@ -154,30 +171,36 @@ def plot_all(filepath: str,
     fnames_cbplot = []
     if isinstance(out_type, str):
         out_type = [out_type]
-    metrics_not_to_plot = list(set(chain(globals._metadata_exclude, globals.metric_groups['triple'], ['n_obs']))) # metadata, tcol metrics, n_obs
-    if globals.DEFAULT_TSW in comparison_periods and len(comparison_periods) > 1:
+    metrics_not_to_plot = list(
+        set(
+            chain(globals._metadata_exclude, globals.metric_groups['triple'],
+                  ['n_obs'])))  # metadata, tcol metrics, n_obs
+    if globals.DEFAULT_TSW in comparison_periods and len(
+            comparison_periods) > 1:
         #check if stability metrics where calculated
-        stability = all(item.isdigit() for item in comparison_periods if item != 'bulk')
+        stability = all(item.isdigit() for item in comparison_periods
+                        if item != 'bulk')
         cbp = QA4SMCompPlotter(filepath)
-        comparison_boxplot_dir = os.path.join(out_dir, globals.CLUSTERED_BOX_PLOT_OUTDIR)
+        comparison_boxplot_dir = os.path.join(
+            out_dir, globals.CLUSTERED_BOX_PLOT_OUTDIR)
         os.makedirs(comparison_boxplot_dir, exist_ok=True)
 
         for available_metric in cbp.metric_kinds_available:
             if available_metric in metrics.keys(
             ) and available_metric not in metrics_not_to_plot:
 
-                spth = [Path(out_dir) / globals.CLUSTERED_BOX_PLOT_OUTDIR /
-                        f'{globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=available_metric, filetype=_out_type)}'
-                        for _out_type in out_type]
-                _fig = cbp.plot_cbp(
-                    chosen_metric=available_metric,
-                    out_name=spth,
-                    stability=stability
-                )
+                spth = [
+                    Path(out_dir) / globals.CLUSTERED_BOX_PLOT_OUTDIR /
+                    f'{globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=available_metric, filetype=_out_type)}'
+                    for _out_type in out_type
+                ]
+                _fig = cbp.plot_cbp(chosen_metric=available_metric,
+                                    out_name=spth,
+                                    stability=stability)
                 plt.close(_fig)
                 fnames_cbplot.extend(spth)
 
-    return fnames_bplot, fnames_mapplot, fnames_csv, fnames_cbplot
+    return fnames_bplot, fnames_mapplot, fnames_csv, fnames_cbplot, fnames_geotiff
 
 
 def get_img_stats(
