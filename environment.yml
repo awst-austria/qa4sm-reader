@@ -14,6 +14,8 @@ dependencies:
 - libtiff<=4.5.1
 - hdf5
 - qtbase<=6.7.2
+- gdal
+- rioxarray
 - pip
 - pip:
     - parse
