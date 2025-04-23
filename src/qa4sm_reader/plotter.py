@@ -1772,9 +1772,10 @@ class QA4SMCompPlotter:
                 Fraction of non-NaN values in a row to keep it. Default is 0.8
 
             keep_empty_cols : bool
-                Whether to keep column names that have non-NaNs below the threshold, but fill them with exclusively NaN. Default is True.\
-                    This is done for the intra-annual metrics, where each month/season should be represented in the plot\
-                    even if there is no data for a specific month/dataset in the end. The opposite is true for stability metrics.
+                Whether to keep column names that have non-NaNs below the threshold, but fill them with exclusively NaN. Default is True.
+                This is done for the intra-annual metrics, where each month/season should be represented in the plot
+                even if there is no data for a specific month/dataset in the end. The opposite is true for stability metrics.
+                However if the sanitization leads to an empty dataframe the columns are kept to produce a plot.
 
             Returns
             -------
@@ -1797,7 +1798,8 @@ class QA4SMCompPlotter:
             df_sanitized = df_sanitized.dropna(thresh=min_non_nan_rows)
             df_sanitized.dropna(inplace=True)
 
-            if not keep_empty_cols:
+            # Return early if we don't need to keep empty columns and have data
+            if not keep_empty_cols and not df_sanitized.empty:
                 return df_sanitized
 
             for col in columns_to_drop:
@@ -1825,7 +1827,8 @@ class QA4SMCompPlotter:
             anchor_number = len(first_df.columns)
             anchor_list = np.arange(anchor_number).astype(float)
 
-        if anchor_list is None:
+        # check also for empty anchor_list
+        if anchor_list is None or (isinstance(anchor_list, np.ndarray) and anchor_list.size == 0):
             anchor_list = self.cbp.anchor_list
 
         centers_and_widths = self.cbp.centers_and_widths(

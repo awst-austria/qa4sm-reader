@@ -420,7 +420,7 @@ def test_bulk_case_transcription(TEST_DATA_DIR, tmp_paths):
     ]
     logging.info(f"Found {len(nc_files)} .nc files for transcription.")
 
-    for ncf in nc_files:
+    for i, ncf in enumerate(nc_files):
         _, ds = run_test_transcriber(ncf,
                                      intra_annual_slices=None,
                                      keep_pytesmo_ncfile=False,
@@ -488,7 +488,7 @@ def test_correct_file_transcription(seasonal_pytesmo_file, seasonal_qa4sm_file, 
         pytesmo_results=monthly_pytesmo_file,
         intra_annual_slices=monthly_tsws,
         keep_pytesmo_ncfile=False)
-    
+
     stability_transcriber = Pytesmo2Qa4smResultsTranscriber(
         pytesmo_results=stability_pytesmo_file,
         intra_annual_slices=stability_tsws,
@@ -533,13 +533,17 @@ def test_correct_file_transcription(seasonal_pytesmo_file, seasonal_qa4sm_file, 
                 f"Dropping variable {var} from expected monthly dataset")
             expected_monthly_ds = expected_monthly_ds.drop_vars(var)
 
-    assert None == xr.testing.assert_equal(
+    # returns None if the datasets are equal
+    assert xr.testing.assert_equal(
         monthly_transcribed_ds,
-        expected_monthly_ds)  # returns None if the datasets are equal
-    assert None == xr.testing.assert_equal(
+        expected_monthly_ds) is None
+    # returns None if the datasets are equal
+    assert xr.testing.assert_equal(
         seasonal_transcribed_ds,
-        expected_seasonal_ds)  # returns None if the datasets are equal
-    assert None == xr.testing.assert_equal(stability_transcribed_ds, expected_stability_ds) # returns None if the datasets are equal
+        expected_seasonal_ds) is None
+    # returns None if the datasets are equal
+    assert xr.testing.assert_equal(stability_transcribed_ds,
+                                   expected_stability_ds) is None
 
     # the method above does not check attrs of the datasets, so we do it here
     # Creation date and qa4sm_reader might differ, so we exclude them from the comparison
