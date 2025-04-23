@@ -1,0 +1,31 @@
+name: qa4sm-reader
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - gdal
+  - pip
+  - python
+  - rasterio
+  - rioxarray
+  - proj
+  - pip:
+      - cartopy>=0.23.0
+      - cftime>=1.6.4
+      - h5netcdf
+      - matplotlib
+      - netcdf4
+      - numpy
+      - pandas
+      - pygeogrids
+      - pyqt5
+      - pytesmo
+      - pytest
+      - pytest-cov
+      - rio-tiler
+      - scikit-learn
+      - scipy
+      - seaborn
+      - shapely
+      - xarray>=2024.0.0
+      - yapf

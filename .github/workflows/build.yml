@@ -21,6 +21,7 @@ jobs:
       matrix:
         python-version: ['3.12']  #  Make sure to use the QA4SM python version
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+        ymlfile: ["environment.yml"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,7 +37,8 @@ jobs:
           miniconda-version: "latest"
           auto-update-conda: true
           python-version: ${{ matrix.python-version }}
-          activate-environment: qa4sm_reader
+          environment-file: ${{ matrix.ymlfile }}
+          activate-environment: qa4sm_reader # todo: must match with name in environment.yml
           auto-activate-base: false
       - name: Print environment infos
         shell: bash -l {0}
@@ -46,6 +48,18 @@ jobs:
           pip list
           which pip
           which python
+#      - name: Fix hdf5 version if needed (Ubuntu only)
+#        if: runner.os == 'Linux'
+#        shell: bash -l {0}
+#        run: |
+#          current_hdf5_version=$(conda list hdf5 | grep hdf5 | awk '{print $1"="$2}')
+#          echo $current_hdf5_version
+#          if [[ "$current_hdf5_version" == "hdf5=1.14.5" ]]; then
+#            echo "The newest build for hdf5 1.14.5 is h2b7332f_1. Installing hdf5=1.14.5=h2b7332f_0 instead, as the newest version crashes our package."
+#            conda install hdf5=1.14.5=h2b7332f_0 --channel conda-forge
+#          else
+#            echo "No change needed. Current hdf5 version: $current_hdf5_version."
+#          fi
       - name: Export Environment
         shell: bash -l {0}
         run: |
