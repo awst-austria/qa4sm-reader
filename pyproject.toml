@@ -1,0 +1,99 @@
+[build-system]
+# AVOID CHANGING REQUIRES: IT WILL BE UPDATED BY PYSCAFFOLD!
+requires = ["setuptools>=46.1.0", "setuptools_scm[toml]>=5", "wheel", "packaging", "build", "twine"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+version_scheme = "no-guess-dev"
+
+[project]
+name = "qa4sm_reader"
+description = "Processes output of qa4sm.eodc.eu (NetCDF file), creating plots and providing the data in other formats."
+readme = "README.rst"
+requires-python = ">=3.6"
+license = { text = "mit" }
+authors = [
+  { name = "TU Wien", email = "support@qa4sm.eu" }
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python"
+]
+keywords = []
+dependencies = [
+    'importlib-metadata; python_version<"3.8"',
+    "xarray>=2024.0.0",
+    "pandas",
+    "numpy",
+    "netcdf4",
+    "h5netcdf",
+    "matplotlib",
+    "pyQt5",
+    "seaborn",
+    "cartopy>=0.23.0",
+    "colorcet",
+    "parse",
+    "scipy",
+    "pygeogrids",
+    "pytesmo",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/awst-austria/qa4sm-reader"
+Documentation = "https://qa4sm-reader.readthedocs.io/en/latest/"
+
+[project.optional-dependencies]
+testing = [
+  "pytest-cov",
+  "coverage",
+  "pytest"
+]
+building = [
+    "setuptools>=46.1.0",
+    "setuptools_scm[toml]>=5",
+    "wheel",
+    "packaging",
+    "build",
+    "twine"
+]
+docs = [
+  "sphinx>=3.2.1,<7",
+  "sphinx_rtd_theme",
+  "mock",
+  "pillow",
+  "recommonmark",
+  "readthedocs-sphinx-ext",
+  "myst_parser",
+  "nbsphinx"
+]
+
+[tool.setuptools]
+packages = { find = { where = ["src"], exclude = ["tests"] } }
+include-package-data = true
+zip-safe = false
+package-dir = { "" = "src" }
+
+[tool.pytest.ini_options]
+addopts = "--cov qa4sm_reader --cov-report term-missing --verbose"
+norecursedirs = ["dist", "build", ".tox"]
+testpaths = ["tests"]
+
+[tool.flake8]
+exclude = [
+  ".tox",
+  "build",
+  "dist",
+  ".eggs",
+  "docs/conf.py"
+]
+
+[tool.yapf]
+based_on_style = "yapf"
+indent_width = 4
+column_limit = 79
+
+[tool.pyscaffold]
+version = "4.6"
+package = "qa4sm_reader"
+extensions = ["no_skeleton"]

@@ -4,6 +4,8 @@ Changelog
 
 Unreleased changes in master branch
 ===================================
+- Added fallback names for new CCI and C3S data
+- Pyscaffold version updated, use pyproject.toml instead of setup.cfg
 
 Version 0.11.2
 ===================================
