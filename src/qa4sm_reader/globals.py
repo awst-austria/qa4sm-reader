@@ -326,6 +326,9 @@ def get_metric_units(dataset, raise_error=False):
         'ISMN': 'm³/m³',
         'C3S': 'm³/m³',  # old name
         'C3S_combined': 'm³/m³',
+        'C3S_active': '% saturation',
+        'C3S_passive': 'm³/m³',
+        'C3S_rzsm': 'm³/m³',
         'GLDAS': 'm³/m³',
         'ASCAT': '% saturation',
         'SMAP': 'm³/m³',   # old name
@@ -335,6 +338,7 @@ def get_metric_units(dataset, raise_error=False):
         'ESA_CCI_SM_active': '% saturation',
         'ESA_CCI_SM_combined': 'm³/m³',
         'ESA_CCI_SM_passive': 'm³/m³',
+        'ESA_CCI_RZSM': 'm³/m³',
         'SMOS': 'm³/m³',   # old name
         'SMOS_IC': 'm³/m³',
         'CGLS_CSAR_SSM1km': '% saturation',
@@ -476,6 +480,9 @@ METADATA_TEMPLATE = {
 _dataset_pretty_names = {  # from qa4sm\validator\fixtures\datasets.json
     'ISMN': 'ISMN',
     'C3S_combined': 'C3S SM combined',
+    'C3S_active': 'C3S SM active',
+    'C3S_passive': 'C3S SM passive',
+    'C3S_rzsm': 'C3S Root-zone SM',
     'C3S': 'C3S SM combined',  # old name for C3S_combined
     'GLDAS': 'GLDAS',
     'ASCAT': 'H-SAF ASCAT SSM CDR',
@@ -486,6 +493,7 @@ _dataset_pretty_names = {  # from qa4sm\validator\fixtures\datasets.json
     'ESA_CCI_SM_active': 'ESA CCI SM active',
     'ESA_CCI_SM_combined': 'ESA CCI SM combined',
     'ESA_CCI_SM_passive': 'ESA CCI SM passive',
+    'ESA_CCI_RZSM': 'ESA CCI Root-zone SM',
     'SMOS_IC': 'SMOS IC',
     'SMOS': 'SMOS IC',  # old name for SMOS IC
     'CGLS_CSAR_SSM1km': 'CGLS S1 SSM',
@@ -590,6 +598,9 @@ def get_resolution_info(dataset, raise_error=False):
     resolution = {  # from /qa4sm/validator/fixtures/datasets.json
         'ISMN': None,
         'C3S_combined': 0.25,
+        'C3S_active': 0.25,
+        'C3S_passive': 0.25,
+        'C3S_rzsm': 0.25,
         'C3S': 0.25,   # old name, unused
         'GLDAS': 0.25,
         'ASCAT': 12.5,
@@ -600,6 +611,7 @@ def get_resolution_info(dataset, raise_error=False):
         'ESA_CCI_SM_active': 0.25,
         'ESA_CCI_SM_combined': 0.25,
         'ESA_CCI_SM_passive': 0.25,
+        'ESA_CCI_RZSM': 0.25,
         'SMOS': 25,   # old name, unused
         'SMOS_IC': 25,
         'CGLS_CSAR_SSM1km': 1,
@@ -615,6 +627,9 @@ def get_resolution_info(dataset, raise_error=False):
         'ISMN': 'point',
         'C3S': 'deg',  # old name, unused
         'C3S_combined': 'deg',
+        'C3S_active': 'deg',
+        'C3S_passive': 'deg',
+        'C3S_rzsm': 'deg',
         'GLDAS': 'deg',
         'ASCAT': 'km',
         'SMAP': 'km',   # old name, unused
@@ -624,6 +639,7 @@ def get_resolution_info(dataset, raise_error=False):
         'ESA_CCI_SM_active': 'deg',
         'ESA_CCI_SM_combined': 'deg',
         'ESA_CCI_SM_passive': 'deg',
+        'ESA_CCI_RZSM': 'deg',
         'SMOS': 'km',   # old name, unused
         'SMOS_IC': 'km',
         'CGLS_CSAR_SSM1km': 'km',
@@ -864,6 +880,9 @@ BAD_METRICS = ['time']
 
 DATASETS = [
     'C3S_combined',
+    'C3S_active',
+    'C3S_passive',
+    'C3S_rzsm',
     'ISMN',
     'GLDAS',
     'SMAP_L3',
@@ -871,6 +890,7 @@ DATASETS = [
     'ESA_CCI_SM_combined',
     'ESA_CCI_SM_active',
     'ESA_CCI_SM_passive',
+    'ESA_CCI_RZSM',
     'SMOS_IC',
     'ERA5',
     'ERA5_LAND',
