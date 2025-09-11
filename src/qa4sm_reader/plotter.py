@@ -24,6 +24,12 @@ from qa4sm_reader.exceptions import PlotterError
 import qa4sm_reader.handlers as hdl
 from qa4sm_reader.utils import note, filter_out_self_combination_tcmetric_vars
 
+# Change of standard matplotlib parameters
+matplotlib.rcParams['legend.framealpha'] = globals.legend_alpha
+matplotlib.rcParams['boxplot.boxprops.linewidth'] = globals.boxplot_edgewidth
+matplotlib.rcParams['boxplot.whiskerprops.linewidth'] = globals.boxplot_edgewidth
+matplotlib.rcParams['boxplot.capprops.linewidth'] = globals.boxplot_edgewidth
+matplotlib.rcParams['boxplot.medianprops.linewidth'] = globals.boxplot_edgewidth
 
 class QA4SMPlotter:
     """
@@ -115,20 +121,22 @@ class QA4SMPlotter:
         capt: str
             box caption
         """
-        ref_meta, mds_meta, other_meta, _ = Var.get_varmeta()
+        ref_meta, mds_meta, other_meta, _, sref_meta = Var.get_varmeta()
         ds_parts = []
         id, meta = mds_meta
         if tc:
             id, meta = other_meta  # show name of the OTHER dataset
         if short_caption:
             ds_parts.append(
-                f"{id}-{meta['pretty_name']} ({meta['pretty_version']})")
+                f"{ref_meta[0]} & {id}")
         else:
-            ds_parts.append('{}-{}\n({})\nVariable: {} [{}]'.format(
-                id, meta['pretty_name'], meta['pretty_version'],
-                meta['pretty_variable'], meta['mu']))
+            ds_parts.append('Datasets: {} & {}\nVariable: {}'.format(
+                ref_meta[0], id,
+                meta['pretty_variable']))
         capt = '\n and \n'.join(ds_parts)
+
         if tc:
+            # Append calculation reference dataset for clearer naming
             capt = 'Other Data:\n' + capt
         return capt
 
@@ -148,22 +156,21 @@ class QA4SMPlotter:
         -------
         parts: list of parts for title
         """
+        
         parts = []
-        ref, mds, other, _ = Var.get_varmeta()
+        ref, mds, other, _, sref = Var.get_varmeta()
         if type == 'boxplot_basic':
-            parts.append(ref[0])
-            parts.extend([ref[1]['pretty_name'], ref[1]['pretty_version']])
+            parts.append(sref[0])
 
         elif type in ['boxplot_tc', 'mapplot_basic', 'mapplot_tc']:
             parts.append(mds[0])
-            parts.extend([mds[1]['pretty_name'], mds[1]['pretty_version']])
+            parts.extend([mds[1]['pretty_name']])
             parts.append(ref[0])
-            parts.extend([ref[1]['pretty_name'], ref[1]['pretty_version']])
-
+            parts.extend([ref[1]['pretty_name']])
             if type == 'mapplot_tc':
                 parts.append(other[0])
                 parts.extend(
-                    [other[1]['pretty_name'], other[1]['pretty_version']])
+                    [other[1]['pretty_name']])
 
         return parts
 
@@ -179,16 +186,16 @@ class QA4SMPlotter:
         """
         titles = {
             'boxplot_basic':
-            'Intercomparison of {} \nwith {}-{} ({}) as spatial reference\n ',
+            'Intercomparison of {}',
             'barplot_basic': 'Validation Errors',
             'mapplot_status': 'Validation Errors',
             'boxplot_tc':
-            'Intercomparison of {} \nfor {}-{} ({}) \nwith {}-{} ({})\n ',
+            'Intercomparison of {} for {}:{} with {}:{}',
             'mapplot_basic':
-            '{} for {}-{} ({}) with {}-{} ({}) as spatial reference',
-            'mapplot_tc': '{} for {}-{} ({}) with {}-{} ({}) and {}-{} ({})',
+            '{} for {}:{} with {}:{}',
+            'mapplot_tc': '{} for {}:{} with {}:{} and {}:{}',
             'metadata':
-            'Intercomparison of {} by {}\nwith spatial reference: {}',
+            'Intercomparison of {} by {}',
         }
 
         try:
@@ -256,7 +263,7 @@ class QA4SMPlotter:
             type of plot
         """
         name = self._filenames_lut(type=type)
-        ref_meta, mds_meta, other_meta, _ = Var.get_varmeta()
+        ref_meta, mds_meta, other_meta, _, sref_meta = Var.get_varmeta()
         # fetch parts of the name for the variable
         if type in ["barplot_basic", "mapplot_status"]:
             parts = []
@@ -287,6 +294,7 @@ class QA4SMPlotter:
         tc: bool = False,
         stats: bool = True,
         mean_ci: bool = True,
+        short_caption = False
     ) -> Generator[pd.DataFrame, hdl.MetricVariable, pd.DataFrame]:
         """
         Get iterable with pandas dataframes for all variables of a metric to plot
@@ -301,6 +309,8 @@ class QA4SMPlotter:
             If true, append the statistics to the caption
         mean_ci: bool
             If True, 'Mean CI: {value}' is added to the caption
+        short_caption: bool, optional
+            whether to use a shorter version of the caption for df columns
 
         Yield
         -----
@@ -321,7 +331,7 @@ class QA4SMPlotter:
             if Var.g == 'common':
                 box_cap_ds = 'All datasets'
             else:
-                box_cap_ds = self._box_caption(Var, tc=tc)
+                box_cap_ds = self._box_caption(Var, tc=tc, short_caption=short_caption)
             # setting in global for caption stats
             if globals.boxplot_printnumbers:
                 box_cap = '{}'.format(box_cap_ds)
@@ -331,15 +341,18 @@ class QA4SMPlotter:
             else:
                 box_cap = box_cap_ds
             df = values.to_frame(box_cap)
-
+            
             ci = self.img.get_cis(Var)
+            
             if ci:  # could be that variable doesn't have CIs - empty list
                 ci = pd.concat(ci, axis=1)
                 label = ""
                 if mean_ci:
                     # get the mean CI range
                     diff = ci["upper"] - ci["lower"]
-                    ci_range = float(diff.mean())
+                    # Problem that nan values were making it impossiple to calculate the mean of the differences
+                    # Therefore they were dropped before calculating means
+                    ci_range = float(diff.dropna().mean().mean())
                     label = "\nMean CI range: {:.3g}".format(ci_range)
                 df.columns = [df.columns[0] + label]
             else:
@@ -350,6 +363,199 @@ class QA4SMPlotter:
                 continue
 
             yield df, Var, ci
+
+    def _get_legend_title(self, Var) -> str:
+        """
+        Creates a title for an existing legend from a QA4SMMetricVariable.
+
+        Parameters
+        ----------
+        Var : QA4SMMetricVariable
+            Var in the image to make the map for.
+
+        Returns
+        -------
+        legend_title : String
+            String containing the legend title
+        """
+        dataset_ref = {Var.Datasets.ref_id:f"{Var.Datasets.ref["pretty_name"]} [{Var.Datasets.ref['mu']}] (spatial reference)"}
+        dataset_others = {Var.Datasets.others_id[i]:f"{Var.Datasets.others[i]["pretty_name"]} [{Var.Datasets.others[i]['mu']}]" for i in range(len(Var.Datasets.others))}
+        legend_title = "Datasets:\n" + "\n".join(f"{k}: {v}" for k, v in (dataset_ref | dataset_others).items())
+        return legend_title
+    
+    def _append_legend_title(self, fig, ax, Var) -> tuple:
+        """
+        Appends a title to an existing legend from a QA4SMMetricVariable.
+
+        Parameters
+        ----------
+        fig : matplotlib.figure.Figure
+            The figure that contains the axes and legend.
+        ax : matplotlib.axes.Axes
+            The subplot axis containing the legend to modify.
+        Var : QA4SMMetricVariable
+            Variable object used to construct the legend title.
+
+        Returns
+        -------
+        fig, ax : tuple
+            The same figure and axis, with the legend title updated.
+        """  
+        legend = ax.get_legend()
+        legend_title = self._get_legend_title(Var)
+
+        # Change Size to same as rest of legend
+        if len(legend.legend_handles) == 0:
+            legend.set_title(legend_title, prop={'size': globals.fontsize_legend})
+        else:
+            fs = legend.get_texts()[0].get_fontsize()
+            legend.set_title(legend_title, prop={'size': fs})
+
+        legend._legend_box.align = "left"
+
+        return fig, ax
+    
+
+
+    def _smart_suptitle(self, fig, pad=globals.fontsize_title/2):
+        """
+        Compute position of Suptitle centeredd above axes.
+
+        Parameters
+        ----------
+        fig : matplotlib.figure.Figure
+            The figure object.
+        pad : float
+            Extra space (in fontsize) above the top axes title.
+        """
+        fig.canvas.draw() 
+
+        top_positions = []
+        for ax in fig.axes:
+            if ax.get_visible():
+                # get bounding box of the title in figure coordinates
+                title = ax.title
+                bbox = title.get_window_extent(renderer=fig.canvas.get_renderer())
+                bbox_fig = bbox.transformed(fig.transFigure.inverted())
+                top_positions.append(bbox_fig.y1 + title.get_fontsize()/(72*fig.get_figheight()))
+
+        if top_positions:
+            y = max(top_positions) + pad/(72*fig.get_figheight())
+            y = min(y, 0.99) # So Suptitle always in Figure
+        else:
+            y = 0.99  # fallback if no axes
+        # get center of axes or average of centers if multiple axes
+        x = np.mean([(ax.get_position().x0+ax.get_position().x1)/2 for ax in fig.get_axes()[:globals.n_col_agg]])
+
+        return x, y
+    
+    def _smart_suplabel(self, fig, axis, pad=globals.fontsize_label/2):
+        """
+        Compute position of suplabels centered according to axes.
+
+        Parameters
+        ----------
+        fig : matplotlib.figure.Figure
+            The figure object.
+        axis : str
+            Axis for which to calculate position.
+        pad : float
+            Extra space (in fontsize) above the top axes title.
+        """
+        fig.canvas.draw() 
+        if axis == "x":
+            bottom_positions = []
+            for ax in fig.axes:
+                if ax.get_visible():
+                    renderer = fig.canvas.get_renderer()
+
+                    # consider x-axis label and tick labels
+                    xlabel_bbox = ax.xaxis.label.get_window_extent(renderer=renderer)
+                    xtick_bboxes = [t.get_window_extent(renderer=renderer) for t in ax.xaxis.get_ticklabels() if t.get_text()]
+                    
+                    all_bboxes = [xlabel_bbox] + xtick_bboxes
+                    all_bboxes_fig = [b.transformed(fig.transFigure.inverted()) for b in all_bboxes]
+                    bottom_positions.append(min(b.y0 for b in all_bboxes_fig))
+
+            if bottom_positions:
+                y = min(bottom_positions) - globals.fontsize_label/(72*fig.get_figheight()) - pad/(72*fig.get_figheight())
+            else:
+                y = 0.01  # fallback
+            x = np.mean([(ax.get_position().x0+ax.get_position().x1)/2 for ax in fig.get_axes()[:globals.n_col_agg]])
+            return x, y
+        elif axis == "y":
+            left_positions = []
+            for ax in fig.axes:
+                if ax.get_visible():
+                    renderer = fig.canvas.get_renderer()
+
+                    # consider x-axis label and tick labels
+                    ylabel_bbox = ax.yaxis.label.get_window_extent(renderer=renderer)
+                    ytick_bboxes = [t.get_window_extent(renderer=renderer) for t in ax.yaxis.get_ticklabels() if t.get_text()]
+                    
+                    all_bboxes = [ylabel_bbox] + ytick_bboxes
+                    all_bboxes_fig = [b.transformed(fig.transFigure.inverted()) for b in all_bboxes]
+                    left_positions.append(min(b.x0 for b in all_bboxes_fig))
+
+            if left_positions:
+                x = min(left_positions) - globals.fontsize_label/(72*fig.get_figwidth()) - pad/(72*fig.get_figheight()) 
+            else:
+                x = 0.01  # fallback
+            y = np.mean([(ax.get_position().y0+ax.get_position().y1)/2 for ax in fig.get_axes()[::globals.n_col_agg]])
+            return x, y
+        else: #fallback
+            return 0.01, 0.01
+
+    def _get_ax_width(self, fig) -> float:
+        """Get horizontal distance of all axes in px. From left of first in row to right of last in row."""
+        left = min([ax.get_position().x0 for ax in fig.get_axes()[:1]]) # Always the first ax
+        right = max([ax.get_position().x1 for ax in fig.get_axes()])
+        ax_width_px = fig.get_figwidth()*(right-left) * fig.dpi
+
+        return ax_width_px
+    
+    def _get_ax_height(self, fig) -> float:
+        """Get vertical distance of all axes in px. From bottom of column to top of column."""
+        bottom = min([ax.get_position().y0 for ax in fig.get_axes()]) # Always the first ax
+        top = max([ax.get_position().y1 for ax in fig.get_axes()])
+        ax_height_px = fig.get_figheight()*(top-bottom) * fig.dpi
+
+        return ax_height_px
+
+    def _set_wrapped_title(self, fig, ax, title, fontsize=globals.fontsize_title,
+                           pad=globals.title_pad, use_suptitle=False):
+        """
+        Set an axes or figure suptitle that automatically wraps to fit within figure width.
+        
+        Parameters
+        ----------
+        fig : matplotlib.figure.Figure
+            The figure object.
+        ax : matplotlib.axes.Axes
+            The target axes (ignored if use_suptitle=True).
+        title : str
+            The title text.
+        fontsize : int
+            Font size of the title.
+        pad : float
+            Extra spacing from the plot, in points.
+        use_suptitle : bool, optional
+            If True, set a figure-wide suptitle instead of an axes title.
+        """
+        fig.canvas.draw()  # needed to get renderer
+
+        # width between most left point and most right point in axesin inches * dpi = pixels
+        ax_width_px = self._get_ax_width(fig)
+
+        # estimate character width (rough, depends on font)
+        wrapped = plm.wrapped_text(fig, title, ax_width_px, fontsize)
+
+        if use_suptitle:
+            x, y = self._smart_suptitle(fig)
+            fig.suptitle(wrapped, fontsize=fontsize, y=y, x=x, ha="center", va="bottom")
+        else:
+            x, y = self._smart_suptitle(fig)
+            ax.set_title(wrapped, fontsize=fontsize, pad=pad)
 
     def _boxplot_definition(self,
                             metric: str,
@@ -379,19 +585,14 @@ class QA4SMPlotter:
         # plot label
         unit_ref = self.ref['short_name']
 
-        _, _, _, scl_meta = Var.get_varmeta()
+        _, _, _, scl_meta, sref_meta = Var.get_varmeta()
         if scl_meta:
             unit_ref = scl_meta[1]['short_name']
         parts = [globals._metric_name[metric]]
         parts.append(globals._metric_description[metric].format(
             globals.get_metric_units(unit_ref)))
         label = "{}{}".format(*parts)
-        # generate plot
-        figwidth = globals.boxplot_width * (len(df.columns) + 1)
-        # otherwise it's too narrow
-        if metric == "n_obs":
-            figwidth = figwidth + 0.2
-        figsize = [figwidth, globals.boxplot_height]
+        figsize = [globals.boxplot_width_vertical, globals.boxplot_height_vertical]
         fig, ax = plm.boxplot(
             df=df,
             ci=ci,
@@ -406,21 +607,19 @@ class QA4SMPlotter:
                 break
         if not type == "metadata":
             title = self.create_title(Var, type=type, period=period)
-            ax.set_title(title, pad=globals.title_pad)
-        if self.img.has_CIs:
-            offset = 0.08  # offset smaller as CI variables have a larger caption
-        if Var.g == 'common':
-            offset = 0.03  # offset larger as common metrics have a shorter caption
+            self._set_wrapped_title(fig, ax, title)
 
-        # fig.tight_layout()
+        # Legendentries for Datasets
+        fig, ax = self._append_legend_title(fig, ax, Var)
 
-        plm.add_logo_to_figure(
-            fig=fig,
-            logo_path=globals.watermark_logo_pth,
-            position=globals.watermark_logo_position,
-            offset=globals.watermark_logo_offset_box_plots,
-            scale=globals.watermark_logo_scale,
-        )
+        if globals.draw_logo:
+            plm.add_logo_to_figure(
+                fig=fig,
+                logo_path=globals.logo_pth,
+                position=globals.logo_position,
+                offset=globals.logo_offset_box_plots,
+                size=globals.logo_size
+            )
 
         return fig, ax
 
@@ -446,10 +645,8 @@ class QA4SMPlotter:
         # plot label
         parts = [globals._metric_name[metric]]
         label = "{}".format(*parts)
-        # generate plot
-        figwidth = globals.boxplot_width * (len(df.columns) + 1)
         # otherwise it's too narrow
-        figsize = [figwidth, globals.boxplot_height]
+        figsize = [globals.boxplot_width_vertical, globals.boxplot_height_vertical]
         fig, ax = plm.barplot(df=df,
                               figsize=figsize,
                               label='# of validation errors')
@@ -461,17 +658,17 @@ class QA4SMPlotter:
                 break
 
         title = self.create_title(Var, type=type, period=period)
+        self._set_wrapped_title(fig, ax, title)
 
-        ax.set_title(title, pad=globals.title_pad)
-
-        # add watermark
-        plm.add_logo_to_figure(
-            fig=fig,
-            logo_path=globals.watermark_logo_pth,
-            position=globals.watermark_logo_position,
-            offset=globals.watermark_logo_offset_bar_plots,
-            scale=globals.watermark_logo_scale,
-        )
+        # add logo
+        if globals.draw_logo:
+            plm.add_logo_to_figure(
+                fig=fig,
+                logo_path=globals.logo_pth,
+                position=globals.logo_position,
+                offset=globals.logo_offset_box_plots,
+                size=globals.logo_size
+            )
 
     def _save_plot(self,
                    out_name: str,
@@ -536,7 +733,7 @@ class QA4SMPlotter:
         fnames, values = [], []
         ci = []
         # we take the last iterated value for Var and use it for the file name
-        for df, Var, var_ci in self._yield_values(metric=metric):
+        for df, Var, var_ci in self._yield_values(metric=metric, short_caption=False):
             values.append(df)
             if var_ci is not None:
                 ci.append(var_ci)
@@ -680,7 +877,7 @@ class QA4SMPlotter:
             if len(self.img.triple) and Var.g == 'pairwise':
                 continue
 
-            ref_meta, mds_meta, other_meta, _ = Var.get_varmeta()
+            ref_meta, mds_meta, other_meta, _, sref_meta = Var.get_varmeta()
 
             self._barplot_definition(metric=metric,
                                      df=values,
@@ -726,7 +923,7 @@ class QA4SMPlotter:
             if selected, the output resolution of the image is
             calculated on the basis of the resolution of the
             reference dataset and the extent of the validation
-            (i.e., hiigh resolution, global validations will
+            (i.e., high resolution, global validations will
             have the maximum available dpi).
             Otherwise, high resolution datasets are assigned the
             maximum dpi as per globals.max_dpi
@@ -737,7 +934,7 @@ class QA4SMPlotter:
         fnames: list of file names with all the extensions
         """
         fnames = []
-        ref_meta, mds_meta, other_meta, scl_meta = Var.get_varmeta()
+        ref_meta, mds_meta, other_meta, scl_meta, sref_meta = Var.get_varmeta()
         metric = Var.metric
         ref_grid_stepsize = self.img.ref_dataset_grid_stepsize
         res, unit = self.img.res_info.values()
@@ -765,7 +962,7 @@ class QA4SMPlotter:
         fig, ax = plm.mapplot(
             df=Var.values[Var.varname],
             metric=metric,
-            ref_short=ref_meta[1]['short_name'],
+            ref_short=sref_meta[1]['short_name'],
             ref_grid_stepsize=ref_grid_stepsize,
             plot_extent=
             None,  # if None, extent is automatically adjusted (as opposed to img.extent)
@@ -803,16 +1000,17 @@ class QA4SMPlotter:
                                              type='mapplot_tc',
                                              period=period)
 
-        # use title for plot, make watermark
-        ax.set_title(title, pad=globals.title_pad)
+        # use title for plot, make logo
+        self._set_wrapped_title(fig, ax, title)
 
-        plm.add_logo_to_figure(
-            fig=fig,
-            logo_path=globals.watermark_logo_pth,
-            position=globals.watermark_logo_position,
-            offset=globals.watermark_logo_offset_map_plots,
-            scale=globals.watermark_logo_scale,
-        )
+        if globals.draw_logo:
+            plm.add_logo_to_figure(
+                fig=fig,
+                logo_path=globals.logo_pth,
+                position=globals.logo_position,
+                offset=globals.logo_offset_box_plots,
+                size=globals.logo_size
+            )
 
         # save file or just return the image
         if save_files:
@@ -957,7 +1155,8 @@ class QA4SMPlotter:
         values = []
         for data, Var, var_ci in self._yield_values(metric=metric,
                                                     stats=False,
-                                                    mean_ci=False):
+                                                    mean_ci=False,
+                                                    short_caption=True):
             values.append(data)
         if not values:
             raise PlotterError(f"No valid values for {metric}")
@@ -972,7 +1171,7 @@ class QA4SMPlotter:
         values = values.reindex(index=meta_values.index)
 
         unit_ref = self.ref['short_name']
-        _, _, _, scl_meta = Var.get_varmeta()
+        _, _, _, scl_meta, sref_meta = Var.get_varmeta()
         if scl_meta:
             unit_ref = scl_meta[1]['short_name']
         mu = globals._metric_description[metric].format(
@@ -995,6 +1194,9 @@ class QA4SMPlotter:
                                    axis=axis,
                                    plot_type=plot_type,
                                    **plotting_kwargs)
+        
+        if out:
+            out = self._append_legend_title(out[0], out[1], Var)
 
         if axis is None:
             fig, ax = out
@@ -1029,7 +1231,8 @@ class QA4SMPlotter:
         values = []
         for df, Var, ci in self._yield_values(metric=metric,
                                               stats=False,
-                                              mean_ci=False):
+                                              mean_ci=False,
+                                              short_caption=True):
             values.append(df)
         if not values:
             raise PlotterError(f"No valid values for {metric}")
@@ -1038,7 +1241,7 @@ class QA4SMPlotter:
         metric_name = globals._metric_name[metric]
 
         unit_ref = self.ref['short_name']
-        _, _, _, scl_meta = Var.get_varmeta()
+        _, _, _, scl_meta, sref_meta = Var.get_varmeta()
         if scl_meta:
             unit_ref = scl_meta[1]['short_name']
 
@@ -1068,15 +1271,24 @@ class QA4SMPlotter:
         kwargs = {
             "metric": metric,
             "metadata": metadata_discrete,
-            "common_y": metric_name + metric_units,
-        }
+            "n_bins": len(set(self.img.metadata[metadata_discrete].values.dropna()[self.img.metadata[metadata_discrete].values.dropna().keys()[0]]))}
+
         plotting_kwargs.update(kwargs)
         n_datasets = len(self.img.datasets.others)
         fig, axes = plm.aggregate_subplots(to_plot=values_subset,
                                            funct=self.meta_single,
                                            n_bars=n_datasets,
                                            **plotting_kwargs)
+        
+        # Append Legend Title
+        if isinstance(axes, plt.Axes):   # single axes case
+            ax_first = axes
+        else:
+            ax_first = axes.flat[0]
 
+        ax_first.legend().set_loc("upper left")
+        _, ax_first = self._append_legend_title(fig, ax_first, Var)
+        
         return fig, axes
 
     def plot_metadata(self,
@@ -1139,24 +1351,51 @@ class QA4SMPlotter:
         title = self._titles_lut("metadata").format(
             globals._metric_name[metric], ", ".join(meta_names),
             self.img.datasets.ref["pretty_title"])
+        
+        # Appending labels for metadata Axis
+        if isinstance(ax, plt.Axes):   # Only for single metadata plots, distracting in multiple subplots
+            if ax.get_ylabel() in [""]+metadata_tuple:
+                ax_width_px = self._get_ax_width(fig)
+                ylabel = plm.wrapped_text(fig, "metadata: " + globals.metadata[metadata_discrete][0] if metadata_discrete else "metadata: " + ", ".join(meta_names), ax_width_px, globals.fontsize_label)
+                ax.set_ylabel(ylabel, fontsize = globals.fontsize_label)
+            elif ax.get_xlabel() == [""]+metadata_tuple:
+                ax_height_px = self._get_ax_height(fig)
+                xlabel = plm.wrapped_text(fig, "metadata: " + globals.metadata[metadata_discrete][0] if metadata_discrete else "metadata: " + ", ".join(meta_names), ax_height_px, globals.fontsize_label)
+                ax.set_xlabel(xlabel, fontsize = globals.fontsize_label)
+        
+        elif isinstance(ax, np.ndarray):
+            for axis in ax.flat:
+                axis.set_ylabel, axis.set_xlabel = "", ""
+            if fig.get_supylabel() in [""]+metadata_tuple:
+                x, y = self._smart_suplabel(fig, "y")
+                ax_width_px = self._get_ax_width(fig)
+                ylabel = plm.wrapped_text(fig, globals._metric_name[metric], ax_width_px, globals.fontsize_label)
+                fig.supylabel(ylabel, 
+                              fontsize=globals.fontsize_label, 
+                              y=y,
+                              x=x)
+            if fig.get_supxlabel() in [""]+metadata_tuple:
+                x, y = self._smart_suplabel(fig, "x")
+                ax_height_px = self._get_ax_height(fig)
+                xlabel = plm.wrapped_text(fig, "metadata: " + globals.metadata[metadata_discrete][0] if metadata_discrete else "metadata: " + ", ".join(meta_names), ax_height_px, globals.fontsize_label)
+                fig.supxlabel(xlabel, 
+                              fontsize=globals.fontsize_label, 
+                              y=y, 
+                              x=x)       
+
         if period:  #$$
             title = f'{period}: {title}'
-        fig.suptitle(title)
 
-        fig.subplots_adjust(bottom=0.2)
-
-        watermark_scale = globals.watermark_logo_scale
-        if metadata == 'network':
-            fig, ax, watermark_scale = scale_figure_for_network_metadata_plot(
-                fig=fig, ax=ax, watermark_scale=watermark_scale)
-
-        plm.add_logo_to_figure(
-            fig=fig,
-            logo_path=globals.watermark_logo_pth,
-            position=globals.watermark_logo_position,
-            offset=globals.watermark_logo_offset_metadata_plots,
-            scale=watermark_scale,
-        )
+        self._set_wrapped_title(fig, None, title, use_suptitle=True)
+        
+        if globals.draw_logo:
+            plm.add_logo_to_figure(
+                fig=fig,
+                logo_path=globals.logo_pth,
+                position=globals.logo_position,
+                offset=globals.logo_offset_metadata_plots,
+                size=globals.logo_size,
+            )
 
         if save_file:
             out_name = self._filenames_lut("metadata").format(
@@ -1605,7 +1844,7 @@ class QA4SMCompPlotter:
 
     def get_legend_entries(self, generic_metric: str) -> Dict[str, str]:
         return {
-            f'{Var.metric_ds[0]}-{Var.metric_ds[1]["short_name"]}':
+            f'{Var.metric_ds[0]} & {Var.metric_ds[1]["short_name"]}':
             # 'hello':
             self.cbp.label_template.format(
                 dataset_name=Var.metric_ds[1]["pretty_name"],
@@ -1743,8 +1982,9 @@ class QA4SMCompPlotter:
 
         def get_legend_entries(cbp_obj: ClusteredBoxPlot,
                                generic_metric: str) -> Dict[str, str]:
+            # {Var.ref_ds[0]}-{Var.ref_ds[1]["short_name"]}_
             return {
-                f'{Var.metric_ds[0]}-{Var.metric_ds[1]["short_name"]}':
+                f'{Var.metric_ds[0]} & {Var.metric_ds[1]["short_name"]}':
                 cbp_obj.label_template.format(
                     dataset_name=Var.metric_ds[1]["pretty_name"],
                     dataset_version=Var.metric_ds[1]["pretty_version"],
@@ -1752,6 +1992,22 @@ class QA4SMCompPlotter:
                     unit=Var.metric_ds[1]["mu"])
                 for Var in get_metric_vars(generic_metric).values()
             }
+        
+        def get_legend_entries_from_vars(cbp_obj: ClusteredBoxPlot, 
+                                         vars: dict) -> Dict[str, str]:
+            return {f'{i}':cbp_obj.label_template.format(
+                    dataset_name=Var.metric_ds[1]["pretty_name"],
+                    dataset_version=Var.metric_ds[1]["pretty_version"],
+                    variable_name=Var.metric_ds[1]["pretty_variable"],
+                    unit=Var.metric_ds[1]["mu"]) if Var.metric_ds[1]['short_name'] in i 
+
+                    else self.cbp.label_template.format(
+                    dataset_name=Var.ref_ds[1]["pretty_name"],
+                    dataset_version=Var.ref_ds[1]["pretty_version"],
+                    variable_name=Var.ref_ds[1]["pretty_variable"],
+                    unit=Var.ref_ds[1]["mu"]) if Var.ref_ds[1]['short_name'] in i 
+
+                    else 'Dataset not in Data' for (i, Var) in vars.items()}
 
         def sanitize_dataframe(df: pd.DataFrame,
                                column_threshold: float = 0.1,
@@ -1837,9 +2093,9 @@ class QA4SMCompPlotter:
             space_per_box_cluster=0.9,
             rel_indiv_box_width=0.8)
 
-        figwidth = globals.boxplot_width * (len(metric_df.columns) + 1
+        figwidth = globals.boxplot_width_vertical * (len(metric_df.columns) + 1
                                             )  # otherwise it's too narrow
-        figsize = [figwidth, globals.boxplot_height]
+        figsize = [figwidth, globals.boxplot_height_vertical]
         fig_kwargs = {
             'figsize': figsize,
             'dpi': 'figure',
@@ -1848,8 +2104,11 @@ class QA4SMCompPlotter:
         metric_df = self.get_metric_df(chosen_metric)
         Vars = get_metric_vars(chosen_metric)
 
+        # !!! New alternative testing
         legend_entries = get_legend_entries(cbp_obj=self.cbp,
                                             generic_metric=chosen_metric)
+        legend_entries = get_legend_entries_from_vars(cbp_obj=self.cbp,
+                                            vars=Vars)
 
         cbp_fig = self.cbp.figure_template(incl_median_iqr_n_axs=False,
                                            fig_kwargs=fig_kwargs)
@@ -1901,8 +2160,7 @@ class QA4SMCompPlotter:
 
         cbp_fig.ax_box.legend(
             handles=legend_handles,
-            fontsize=globals.CLUSTERED_BOX_PLOT_STYLE['fig_params']
-            ['legend_fontsize'],
+            fontsize=globals.fontsize_legend,
             ncols=_ncols)
 
         xtick_pos = self.cbp.centers_and_widths(anchor_list=anchor_list,
@@ -1925,13 +2183,13 @@ class QA4SMCompPlotter:
         if len(xtick_labels) > 19 and stability:
             xtick_labels = [label.replace("\n", " ") for label in xtick_labels]
             cbp_fig.ax_box.set_xticklabels(xtick_labels)
-            cbp_fig.ax_box.tick_params(axis='x', rotation=315)
+            cbp_fig.ax_box.tick_params(axis='x', rotation=315,
+                                       labelsize=globals.fontsize_ticklabel)
         else:
             cbp_fig.ax_box.set_xticklabels(xtick_labels)
         cbp_fig.ax_box.tick_params(
             axis='both',
-            labelsize=globals.CLUSTERED_BOX_PLOT_STYLE['fig_params']
-            ['tick_labelsize'])
+            labelsize=globals.fontsize_ticklabel)
 
         _dummy_xticks = [
             cbp_fig.ax_box.axvline(x=(a + b) / 2, color='lightgrey') for a, b
@@ -1954,13 +2212,11 @@ class QA4SMCompPlotter:
 
         cbp_fig.fig.suptitle(
             title,
-            fontsize=globals.CLUSTERED_BOX_PLOT_STYLE['fig_params']
-            ['title_fontsize'])
+            fontsize=globals.fontsize_title)
 
         cbp_fig.ax_box.set_ylabel(
             self.create_label(Var),
-            fontsize=globals.CLUSTERED_BOX_PLOT_STYLE['fig_params']
-            ['y_labelsize'],
+            fontsize=globals.fontsize_label,
         )
 
         spth = [

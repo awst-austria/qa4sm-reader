@@ -60,12 +60,14 @@ class MixinVarmeta:
             this is the dataset for which the metric is calculated
         dss : id, dict
             this is the additional dataset in TC variables
+        sref_ds : id, dict
+            spatial reference dataset
         scale_ds: id, dict
             this is the scaling dataset
         """
         if self.g == 'common':
             ref_ds = self.Datasets.dataset_metadata(self.Datasets._ref_id())
-            mds, dss, scale_ds = None, None, None
+            mds, dss, scale_ds, sref_ds = None, None, None, self.Datasets.dataset_metadata(self.parts['sref_id'])
 
         else:
             scale_ds = None
@@ -82,6 +84,7 @@ class MixinVarmeta:
                         f"units of spatial reference are used.")
         
             ref_ds = self.Datasets.dataset_metadata(self.parts['ref_id'])
+            sref_ds = self.Datasets.dataset_metadata(self.parts['sref_id'])
             mds = self.Datasets.dataset_metadata(self.parts['sat_id0'])
             dss = None
 
@@ -101,7 +104,7 @@ class MixinVarmeta:
                     self.Datasets.dataset_metadata(self.parts['sat_id1'])
                 ]
 
-        return ref_ds, mds, dss, scale_ds
+        return ref_ds, mds, dss, scale_ds, sref_ds
 
 
 class QA4SMDatasets():
@@ -409,6 +412,10 @@ class QA4SMVariable():
     @property
     def ismetric(self) -> bool:
         return self.g is not None
+    
+    def numbers_at_end_int(self, s):
+        match = re.search(r'(\d+)$', s)
+        return int(match.group(1))
 
     def _parse_wrap(self, pattern, g):
         """Wrapper function that handles case of metric 'status' that occurs
@@ -452,17 +459,20 @@ class QA4SMVariable():
             # parse infromation from pattern and name
 
             parts = self._parse_wrap(pattern, g)
-
-            if parts is not None and parts['metric'] in globals.metric_groups[
-                    g]:
-                return parts['metric'], g, parts.named
+            if parts is not None and parts['metric'] in globals.metric_groups[g]:
+                parts_dict = parts.named
+                parts_dict['sref_id'] = self.numbers_at_end_int(self.attrs["val_ref"]) # spatial reference always 0
+                parts_dict['sref_ds'] = self.attrs[self.attrs["val_ref"]]
+                return parts['metric'], g, parts_dict
             # perhaps it's a CI variable
             else:
                 pattern = '{}{}'.format(globals.get_metric_format(g, globals.var_name_CI), template)
                 parts = parse(pattern, self.varname)
-                if parts is not None and parts[
-                        'metric'] in globals.metric_groups[g]:
-                    return parts['metric'], g, parts.named
+                if parts is not None and parts['metric'] in globals.metric_groups[g]:
+                    parts_dict = parts.named
+                    parts_dict['sref_id'] = self.numbers_at_end_int(self.attrs["val_ref"]) # spatial reference always 0
+                    parts_dict['sref_ds'] = self.attrs[self.attrs["val_ref"]]
+                    return parts['metric'], g, parts_dict
 
         return None, None, None
 
@@ -474,7 +484,7 @@ class MetricVariable(QA4SMVariable, MixinVarmeta):
         super().__init__(varname, global_attrs, values)
 
         self.Metric = QA4SMMetric(self.metric)
-        self.ref_ds, self.metric_ds, self.other_ds, _ = self.get_varmeta()
+        self.ref_ds, self.metric_ds, self.other_ds, _, self.sref_ds = self.get_varmeta()
 
 
 class ConfidenceInterval(QA4SMVariable, MixinVarmeta):
@@ -484,7 +494,7 @@ class ConfidenceInterval(QA4SMVariable, MixinVarmeta):
         super().__init__(varname, global_attrs, values)
 
         self.Metric = QA4SMMetric(self.metric)
-        self.ref_ds, self.metric_ds, self.other_ds, _ = self.get_varmeta()
+        self.ref_ds, self.metric_ds, self.other_ds, _, self.sref_ds = self.get_varmeta()
 
         self.bound = self.parts["bound"]
 
