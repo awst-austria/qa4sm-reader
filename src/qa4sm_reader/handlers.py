@@ -262,8 +262,7 @@ class QA4SMDatasets():
         }
 
         # not from dataset.
-        names['mu'] = "{}".format(globals.get_metric_units(
-            names['short_name']))
+        names['mu'] = self._fetch_attribute("_val_dc_unit", dc)
 
         # combined name for plots:
         names['pretty_title'] = '{} ({})'.format(names['pretty_name'],
@@ -484,7 +483,7 @@ class MetricVariable(QA4SMVariable, MixinVarmeta):
         super().__init__(varname, global_attrs, values)
 
         self.Metric = QA4SMMetric(self.metric)
-        self.ref_ds, self.metric_ds, self.other_ds, _, self.sref_ds = self.get_varmeta()
+        self.ref_ds, self.metric_ds, self.other_ds, self.scl_ref, self.sref_ds = self.get_varmeta()
 
 
 class ConfidenceInterval(QA4SMVariable, MixinVarmeta):

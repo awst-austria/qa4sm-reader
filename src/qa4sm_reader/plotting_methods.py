@@ -27,8 +27,11 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcol
 import matplotlib.ticker as mticker
 import matplotlib.gridspec as gridspec
+from matplotlib.collections import LineCollection
+from matplotlib.legend_handler import HandlerLineCollection, HandlerTuple
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from matplotlib.patches import Patch, PathPatch
+from matplotlib.patches import Patch, PathPatch, Rectangle
+from qa4sm_reader.colors import get_color_for, get_palette_for
 
 from cartopy import config as cconfig
 import cartopy.feature as cfeature
@@ -46,6 +49,7 @@ import textwrap
 
 # Change of standard matplotlib parameters
 matplotlib.rcParams['legend.framealpha'] = globals.legend_alpha
+plt.rcParams['hatch.linewidth'] = globals.hatch_linewidth
 # Change of standard seaborn boxplot parameters through monkeypatching
 _old_boxplot = sns.boxplot
 
@@ -58,7 +62,7 @@ def custom_boxplot(*args, **kwargs):
     )
     for k, v in defaults.items():
         if k in kwargs:
-            defaults[k].update(kwargs[k])
+            defaults[k].update(kwargs.pop(k))
     return _old_boxplot(*args, **kwargs, **defaults)
 
 sns.boxplot = custom_boxplot
@@ -125,16 +129,17 @@ def best_legend_pos_exclude_list(ax, forbidden_locs= globals.leg_loc_forbidden):
     # candidate positions
     candidate_locs = [loc for loc in locs.values() if loc not in forbidden_nums]
     
-    handles, labels = ax.get_legend_handles_labels()
     fig = ax.figure
     
     min_overlap = float("inf")
     best_loc = candidate_locs[0]
     
     # evaluate overlap for each candidate
+    leg = ax.get_legend()
+    if not leg:
+        leg = ax.legend()
     for loc in candidate_locs:
-        leg = ax.legend(handles, labels, loc=loc)
-        ax.add_artist(leg)
+        leg.set_loc(loc=loc)
         fig.canvas.draw()
         
         bbox_legend = leg.get_window_extent()
@@ -147,8 +152,6 @@ def best_legend_pos_exclude_list(ax, forbidden_locs= globals.leg_loc_forbidden):
                 xpix, ypix = ax.transData.transform((x, y))
                 if bbox_legend.contains(xpix, ypix):
                     overlap += 1
-        
-        leg.remove()
         
         if overlap < min_overlap:
             min_overlap = overlap
@@ -628,13 +631,13 @@ def style_map(
                                             'land',
                                             map_resolution,
                                             edgecolor='none',
-                                            facecolor="#E0E0E0")
+                                            facecolor=globals.map_land_color)
         ax.add_feature(land, zorder=1)
     if add_water:
         ocean = cfeature.NaturalEarthFeature(category='physical', 
                                              name='ocean', 
                                              scale=map_resolution, 
-                                             facecolor="#c6eaff")
+                                             facecolor=globals.map_water_color)
         
         ax.add_feature(ocean)
     if add_borders:
@@ -979,15 +982,7 @@ def _make_cbar(fig,
 
     """
     if label is None:
-        label = globals._metric_name[metric] + \
-                globals._metric_description[metric].format(
-                    globals.get_metric_units(ref_short)
-                )
-        if scl_short:
-            label = globals._metric_name[metric] + \
-                    globals._metric_description[metric].format(
-                        globals.get_metric_units(scl_short)
-                    )
+        label = globals._metric_name[metric]
 
     extend = get_extend_cbar(metric)
     if diff_map:
@@ -1050,7 +1045,7 @@ def _CI_difference(fig, ax, ci):
         diff = ci_df["upper"] - ci_df["lower"]
         ci_range = float(diff.mean())
         ypos = float(ci_df["lower"].min())
-        ax.annotate("Mean CI\nRange:\n {:.2g}".format(ci_range),
+        ax.annotate("Mean CI\nRange:\n {:.2g}".format(ci_range) if ci_range>0.01 else "Mean CI\nRange:\n <0.01",
                     xy=(xmin - 0.2, ypos),
                     horizontalalignment="center")
 
@@ -1114,6 +1109,220 @@ def _box_stats(ds: pd.Series,
 
     return stats
 
+def capsizing(ax, orient="v", factor=globals.cap_factor, iterative=True, n_lines=None):
+    """Deals with adjusting the capsize of the boxplot whiskers to factor * boxwidth.
+        Parameters
+        ----------
+        ax : matplotlib.axes object
+            ax containing new lines of boxplot
+        n_lines : int, optional
+            number of preexisting lines before drawing the boxplot. 
+            Only used when function called in loop.
+        orient : str, optional
+            which orientation does the boxplot have
+        factor : float, optional
+            factor of capwidth to boxwidth
+        iterative : bool, optional
+            determines if function gets called in loop or should loop 
+            through boxplots by itself
+    """
+    if iterative:
+        new_lines = ax.lines[n_lines:]
+        cap1, cap2 = new_lines[2], new_lines[3]
+        if orient == "v":
+            dist = new_lines[4].get_xdata()[1] - new_lines[4].get_xdata()[0]
+            center = new_lines[4].get_xdata().mean()
+            cap1.set_xdata([center - dist*factor/2, center + dist*factor/2])
+            cap2.set_xdata([center - dist*factor/2, center + dist*factor/2])
+        elif orient == "h":
+            dist = new_lines[4].get_ydata()[1] - new_lines[4].get_ydata()[0]
+            center = new_lines[4].get_ydata().mean()
+            cap1.set_ydata([center - dist*factor/2, center + dist*factor/2])
+            cap2.set_ydata([center - dist*factor/2, center + dist*factor/2])
+    elif not iterative:
+        for i in range(int(len(ax.lines)/5)): # 5 lines per boxplot
+            box_lines = ax.lines[i*5:(i+1)*5] # lines of each boxplot
+            cap1, cap2 = box_lines[2], box_lines[3]
+            if orient == "v":
+                dist = box_lines[4].get_xdata()[1] - box_lines[4].get_xdata()[0]
+                center = box_lines[4].get_xdata().mean()
+                cap1.set_xdata([center - dist*factor/2, center + dist*factor/2])
+                cap2.set_xdata([center - dist*factor/2, center + dist*factor/2])
+            elif orient == "h":
+                dist = box_lines[4].get_ydata()[1] - box_lines[4].get_ydata()[0]
+                center = box_lines[4].get_ydata().mean()
+                cap1.set_ydata([center - dist*factor/2, center + dist*factor/2])
+                cap2.set_ydata([center - dist*factor/2, center + dist*factor/2])
+
+def get_box_bbox_data(ax, box):
+    """
+    Return (x0, y0, x1, y1) bounding box of a seaborn/matplotlib
+    box (PathPatch) in DATA coordinates.
+    """
+    # Vertices of the PathPatch (still in its own normalized coords)
+    verts = box.get_path().vertices
+
+    # First map through the box's transform (usually to display coords)
+    verts_disp = box.get_transform().transform(verts)
+
+    # Then map from display coords back to data coords
+    verts_data = ax.transData.inverted().transform(verts_disp)
+
+    # Bounding box corners in data coordinates
+    x0, y0 = np.min(verts_data, axis=0)
+    x1, y1 = np.max(verts_data, axis=0)
+    return x0, y0, x1, y1
+
+def triangle_hatching(ax, box, dist=0.5, direction="up", zorder=-1, linewidth=1, color="k", alpha=1):
+    """
+    Draw triangular hatching inside a box patch using a LineCollection (fast).
+
+    This function overlays evenly spaced triangular lines across the bounding box 
+    of the given `box` patch. Triangles can point in four directions: 'up', 'down', 
+    'left', or 'right'.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        The axes object on which to draw.
+    box : matplotlib.patches.Patch
+        A rectangular patch (usually a PathPatch from a seaborn boxplot).
+    dist : float, default=0.5
+        Vertical (or horizontal) spacing between adjacent triangles in data units.
+    direction : {"up", "down", "left", "right"}, default="up"
+        Orientation of the triangles:
+        - "up" : triangles point upwards
+        - "down" : triangles point downwards
+        - "left" : triangles point leftwards
+        - "right" : triangles point rightwards
+    zorder : int, default=-1
+        Drawing order of the hatch lines relative to other artists.
+    linewidth : float, default=1
+        Width of the hatch lines.
+    color : str or tuple, default="k"
+        Color of the hatch lines.
+    alpha : float, default=1
+        Opacity of the hatch lines (0=transparent, 1=opaque).
+
+    Notes
+    -----
+    - Uses a LineCollection to add all lines in one artist for speed.
+    - Automatically handles truncated triangles at the edges.
+    - Works with boxes from seaborn/matplotlib (PathPatch or Rectangle).
+    """
+
+    # Get bounding box in data coordinates
+    x0, y0, x1, y1 = get_box_bbox_data(ax, box)
+    lines = []
+
+    if direction in ("up", "down"):
+        y = y1 - y0
+        for i in range(int(y // dist) + 1):
+            if direction == "up":
+                base_y = i * dist + y0
+                if base_y + dist <= y1:  # full triangle
+                    lines.append([(x0, base_y), ((x0 + x1)/2, base_y + dist)])
+                    lines.append([((x0 + x1)/2, base_y + dist), (x1, base_y)])
+                else:  # truncated top
+                    dy = y1 - base_y
+                    if dy > 0:
+                        lines.append([(x0, base_y), (x0 + (x1-x0)/2 * dy/dist, y1)])
+                        lines.append([(x1 - (x1-x0)/2 * dy/dist, y1), (x1, base_y)])
+            elif direction == "down":
+                base_y = y1 - i * dist
+                if base_y - dist >= y0:  # full triangle
+                    lines.append([(x0, base_y), ((x0 + x1)/2, base_y - dist)])
+                    lines.append([((x0 + x1)/2, base_y - dist), (x1, base_y)])
+                else:  # truncated bottom
+                    dy = base_y - y0
+                    if dy > 0:
+                        lines.append([(x0, base_y), (x0 + (x1-x0)/2 * dy/dist, y0)])
+                        lines.append([(x1 - (x1-x0)/2 * dy/dist, y0), (x1, base_y)])
+
+    elif direction in ("left", "right"):
+        x = x1 - x0
+        for i in range(int(x // dist) + 1):
+            if direction == "right":
+                base_x = i * dist + x0
+                if base_x + dist <= x1:
+                    lines.append([(base_x, y0), (base_x + dist, (y0+y1)/2)])
+                    lines.append([(base_x + dist, (y0+y1)/2), (base_x, y1)])
+                else:
+                    dx = x1 - base_x
+                    if dx > 0:
+                        lines.append([(base_x, y0), (x1, y0 + (y1-y0)/2 * dx/dist)])
+                        lines.append([(x1, y1 - (y1-y0)/2 * dx/dist), (base_x, y1)])
+            elif direction == "left":
+                base_x = x1 - i * dist
+                if base_x - dist >= x0:
+                    lines.append([(base_x, y0), (base_x - dist, (y0+y1)/2)])
+                    lines.append([(base_x - dist, (y0+y1)/2), (base_x, y1)])
+                else:
+                    dx = base_x - x0
+                    if dx > 0:
+                        lines.append([(base_x, y0), (x0, y0 + (y1-y0)/2 * dx/dist)])
+                        lines.append([(x0, y1 - (y1-y0)/2 * dx/dist), (base_x, y1)])
+
+    # Add all lines as a single collection for speed
+    lc = LineCollection(lines, colors=color, linewidths=linewidth, alpha=alpha, zorder=zorder)
+    ax.add_collection(lc)
+    return lc
+
+class HandlerHatch(HandlerTuple):
+    def __init__(self, **kwargs):
+        super().__init__(ndivide=None, **kwargs)
+
+    def create_artists(self, legend, orig_handle,
+                       xdescent, ydescent, width, height, fontsize, trans):
+        """
+        Draw both Rectangle and LineCollection overlaid in the legend box.
+        """
+        patch, hatch = orig_handle
+
+        # Scale patch to legend box
+        p = Rectangle([xdescent, ydescent], width, height,
+                      facecolor=patch.get_facecolor(),
+                      edgecolor=patch.get_edgecolor(),
+                      transform=trans)
+
+        # Transform hatch line segments into legend box
+        lines = []
+        for seg in hatch.get_segments():
+            seg2 = [(xdescent + x * width, ydescent + y * height) for (x, y) in seg]
+            lines.append(seg2)
+
+        h = LineCollection(lines,
+                           colors=hatch.get_colors(),
+                           linewidths=hatch.get_linewidths(),
+                           transform=trans)
+
+        return [h, p]
+    
+def hatched_legend_entry(facecolor, direction="up", hatch_color="k", lw=globals.hatch_linewidth, zorder=-1):
+    """
+    Create a proxy legend handle: a colored rectangle with triangular hatching.
+    The hatching is drawn inside the normalized legend box [0,1]x[0,1].
+    
+    direction: "up", "down", "left", "right"
+    """
+    # Background rectangle
+    patch = Rectangle((0, 0), 1, 1, facecolor=facecolor, edgecolor="black")
+
+    # Hatch lines in legend coordinates
+    if direction == "up":
+        lines = [[(0, 0), (0.5, 1)], [(0.5, 1), (1, 0)]]
+    elif direction == "down":
+        lines = [[(0, 1), (0.5, 0)], [(0.5, 0), (1, 1)]]
+    elif direction == "left":
+        lines = [[(1, 0), (0, 0.5)], [(0, 0.5), (1, 1)]]
+    elif direction == "right":
+        lines = [[(0, 0), (1, 0.5)], [(1, 0.5), (0, 1)]]
+    else:
+        lines = []
+
+    hatch = LineCollection(lines, colors=hatch_color, linewidths=lw, zorder=zorder)
+
+    return (patch, hatch)
 
 def boxplot(
     df,
@@ -1122,6 +1331,7 @@ def boxplot(
     figsize=None,
     dpi=100,
     axis=None,
+    new_coloring=globals.boxplot_new_coloring,
     **plotting_kwargs,
 ) -> tuple:
     """
@@ -1143,8 +1353,11 @@ def boxplot(
         Figure size in inches. The default is globals.map_figsize.
     dpi : int, optional
         Resolution for raster graphic output. The default is globals.dpi.
-    axis : matplotlib Axis obj.
-        if provided, the plot will be shown on it
+    new_coloring : bool, optional
+        determines if hashed dataset combinations are used to derive a 
+        colorscheme, or classic blue, white, red is used
+        'old' -> blue, white, red
+        'new' -> hashed dataset combinations + hatching
 
     Returns
     -------
@@ -1153,32 +1366,36 @@ def boxplot(
     ax : matplotlib.axes.Axes
     """
     values = df.copy()
-    center_pos = np.arange(len(values.columns))
+    unique_combos = values["dataset"].unique()
     # make plot
 
-    ax = axis
+    axes = [axis]
     if axis is None:
-        # fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-        
-        if len(values.columns) > globals.bin_th: 
+        n_axes = ((len(unique_combos)-1)//globals.n_boxplots_in_row) + 1
+        if values["dataset"].nunique() > globals.bin_th: 
             dims = [
-                globals.boxplot_width_vertical*len(values.columns)/globals.bin_th,
-                globals.boxplot_height_vertical
+                globals.boxplot_width_vertical*values["dataset"].nunique()/globals.bin_th \
+                    if values["dataset"].nunique()<globals.n_boxplots_in_row \
+                        else globals.boxplot_width_vertical*globals.n_boxplots_in_row/globals.bin_th,
+                globals.boxplot_height_vertical*(n_axes**(1/1.4))
             ]
         else:
             dims = [
                 globals.boxplot_width_vertical,
-                globals.boxplot_height_vertical
+                globals.boxplot_height_vertical*(n_axes**(1/1.4))
             ]
 
         fig = plt.figure(figsize = (dims[0], dims[1]))
-        ax = fig.add_axes([globals.ax_left, globals.ax_bottom, globals.ax_width, globals.ax_height])
-
+        axes = []
+        for i in range(n_axes):
+            ax_left = globals.ax_left
+            ax_bottom = (n_axes - i - 1 + globals.ax_bottom)/n_axes
+            ax = fig.add_axes([ax_left, ax_bottom, globals.ax_width, globals.ax_height/n_axes])
+            axes.append(ax)
     else:
         fig = None
-    ticklabels = values.columns
     # styling of the boxes
-    kwargs = {"patch_artist": True, "return_type": "dict"}
+    kwargs = {"patch_artist": True}
     for key, value in plotting_kwargs.items():
         kwargs[key] = value
 
@@ -1188,12 +1405,6 @@ def boxplot(
         widths = kwargs['widths']
         del kwargs['widths']
 
-    if not 'positions' in kwargs:
-        positions = center_pos
-    else:
-        positions = kwargs['positions']
-        del kwargs['positions']
-
     # changes necessary to have confidence intervals in the plot
     # could be an empty list or could be 'None', if de-selected from the kwargs
     if ci:
@@ -1201,84 +1412,122 @@ def boxplot(
         widths_ci = widths/2
         spacing = (widths + widths_ci)/2
 
-        upper, lower = [], []
-        for n, intervals in enumerate(ci):
-            lower.append(intervals["lower"])
-            upper.append(intervals["upper"])
+    palette = get_palette_for(unique_combos)
+    l_low, l_up = [], []
 
-        lower = pd.concat(lower, ignore_index=True, axis=1)
-        upper = pd.concat(upper, ignore_index=True, axis=1)
-        lower = _add_dummies(
-            lower,
-            len(center_pos) - len(ci),
-        )
-        upper = _add_dummies(
-            upper,
-            len(center_pos) - len(ci),
-        )
-        c_lower = "#87CFEBAA"
-        c_upper = '#FF6347AA'
-        low = lower.boxplot(positions=center_pos - spacing,
+    for ax_i in range(n_axes): #determine which ax to draw on
+        ax = axes[ax_i]
+        ax_combos = unique_combos[ax_i*globals.n_boxplots_in_row:(ax_i+1)*globals.n_boxplots_in_row]
+        for i, d in enumerate(ax_combos): #slice combos to obtain only combinations on axis
+            data = values[values["dataset"]==d]
+            position = i
+            if ci:
+                pos_lower = position - spacing
+                pos_upper = position + spacing
+            color_cen = palette[ax_combos[i]] if new_coloring else "white"
+            n_lines = len(ax.lines)
+            cen = sns.boxplot(data = data, 
+                            x = "label",
+                            y = "value",
+                            positions = [position],
+                            color = color_cen,
                             showfliers=False,
-                            widths=widths_ci,
-                            ax=ax,**kwargs)
+                            widths=widths,
+                            ax=ax, 
+                            orient="v",
+                            dodge=True,
+                            **kwargs)
+            capsizing(cen, n_lines = n_lines)
 
-        up = upper.boxplot(positions=center_pos + spacing,
-                           showfliers=False,
-                           widths=widths_ci,
-                           ax=ax,
-                           **kwargs)
-        patch_styling(low, c_lower)
-        patch_styling(up, c_upper)
+            if ci:
+                c_lower = palette[ax_combos[i]] if new_coloring else"#87CFEBAA"
+                c_upper = palette[ax_combos[i]] if new_coloring else'#FF6347AA'
+                n_lines = len(ax.lines)
+                low = sns.boxplot(data = ci[d],
+                                y = "lower",
+                                positions = [pos_lower],
+                                color = c_lower,
+                                showfliers=False,
+                                widths=widths_ci,
+                                ax=ax, 
+                                orient="v",
+                                dodge=True,
+                                **kwargs)
+                capsizing(low, n_lines=n_lines)
+                l_low.append(ax.patches[-1]) # ax.patches[-1] gets last drawn patch
 
-    cen = values.boxplot(positions=positions,
-                         showfliers=False,
-                         widths=widths,
-                         ax=ax,
-                         **kwargs)
-    
-    # If non-metadata and metadata should look the same
-    # if ci:
-    #     patch_styling(cen, 'white')
-    # else:
-    #     patch_styling(cen, sns.color_palette("Set2")[0])
-    # Else
-    patch_styling(cen, 'white')
+                n_lines = len(ax.lines)
+                up = sns.boxplot(data = ci[d],
+                                y = "upper",
+                                positions = [pos_upper],
+                                color = c_upper,
+                                showfliers=False,
+                                widths=widths_ci,
+                                ax=ax, 
+                                orient="v",
+                                dodge=True,
+                                **kwargs)     
+                capsizing(up, n_lines=n_lines)
+                l_up.append(ax.patches[-1])               
 
-    # provide y label
+        if label is not None:
+            plt.ylabel(label, fontsize = globals.fontsize_label)
+            #insert xlabel here
 
-    if label is not None:
-        plt.ylabel(label, fontsize = globals.fontsize_label)
-        #insert xlabel here
+        if ci and new_coloring:
+            dist = (ax.get_ylim()[1]-ax.get_ylim()[0])/globals.num_hatches
+            for low in l_low:
+                triangle_hatching(ax, low, dist=dist, direction="down", color=low.get_facecolor()[:3], linewidth=globals.hatch_linewidth) 
+                low.set_facecolor(low.get_facecolor()[:3]+(globals.ci_alpha,))
+            for up in l_up:
+                triangle_hatching(ax, up, dist=dist, direction="up", color=up.get_facecolor()[:3], linewidth=globals.hatch_linewidth)
+                up.set_facecolor(up.get_facecolor()[:3]+(globals.ci_alpha,))
 
-    ax.set_xticks(positions)
-    ax.set_xticklabels(ticklabels)
-    ax.tick_params(labelsize=globals.fontsize_ticklabel)
-    # ax.grid(axis='x')
+            up_handle   = hatched_legend_entry(up.get_facecolor()[:3]+(globals.ci_alpha,), hatch_color=up.get_facecolor()[:3], direction="up", lw=globals.hatch_linewidth)
+            low_handle  = hatched_legend_entry(low.get_facecolor()[:3]+(globals.ci_alpha,), hatch_color=low.get_facecolor()[:3], direction="down", lw=globals.hatch_linewidth)
 
-    ticks = ax.get_xticks()
-    midpoints = [(ticks[i] + ticks[i + 1]) / 2 for i in range(len(ticks) - 1)]
-    ax.xaxis.set_minor_locator(plt.FixedLocator(midpoints))
-    ax.grid(which='minor', color='gray', linestyle='dotted', linewidth=0.8)
-    ax.grid(which='major', axis='y', color='gray', linestyle='-', linewidth=0.8)
-    ax.grid(which='major', axis='x', visible=False)
+            ax.legend(handles=[up_handle, low_handle],
+                    labels=["Upper CI", "Lower CI"],
+                    fontsize=globals.fontsize_legend,
+                    loc=best_legend_pos_exclude_list(ax),
+                    handler_map={tuple: HandlerHatch()})
+        ax.set_xlabel(None)
 
-    ax.spines['right'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-    ax.legend(fontsize=globals.fontsize_legend, loc=best_legend_pos_exclude_list(ax))
+        if ci and not new_coloring:
+            low_patch = Patch(facecolor=c_lower, edgecolor="black")
+            up_patch = Patch(facecolor=c_upper, edgecolor="black")
 
-    if len(ticks)>globals.no_growth_th_v:
-        ax.set_xlim(ticks[0]-(ticks[1]-ticks[0])/2, ticks[-1]+(ticks[-1]-ticks[-2])/2)
-    else:
-        ax.set_xlim((ticks[0]+ticks[-1])/2-(globals.no_growth_th_v+1)/2, (ticks[0]+ticks[-1])/2 +(globals.no_growth_th_v+1)/2)
+            ax.legend(handles=[up_patch, low_patch],
+                    labels=["Upper CI", "Lower CI"],
+                    fontsize=globals.fontsize_legend,
+                    loc=best_legend_pos_exclude_list(ax))
+        if label is not None:
+            plt.ylabel(label, fontsize = globals.fontsize_label)
+        positions = np.arange(len(ax_combos))
+        ticklabels = values["label"].unique()[ax_i*globals.n_boxplots_in_row:(ax_i+1)*globals.n_boxplots_in_row]
+        ax.set_xticks(positions)
+        ax.set_xticklabels(ticklabels)
+        ax.tick_params(labelsize=globals.fontsize_ticklabel)
 
-    if ci:
-        low_ci = Patch(color=c_lower, alpha=1, label='Lower CI')
-        up_ci = Patch(color=c_upper, alpha=1, label='Upper CI')
-        ax.legend(handles=[low_ci, up_ci], fontsize=globals.fontsize_legend, loc=best_legend_pos_exclude_list(ax))
+        ticks = ax.get_xticks()
+        midpoints = [(ticks[i] + ticks[i + 1]) / 2 for i in range(len(ticks) - 1)]
+        ax.xaxis.set_minor_locator(plt.FixedLocator(midpoints))
+        ax.grid(which='minor', color='gray', linestyle='dotted', linewidth=0.8)
+        ax.grid(which='major', axis='y', color='gray', linestyle='-', linewidth=0.8)
+        ax.grid(which='major', axis='x', visible=False)
 
-    return fig, ax
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
 
+        if len(ticks)>globals.no_growth_th_v:
+            ax.set_xlim(ticks[0]-(ticks[1]-ticks[0])/2, ticks[-1]+(ticks[-1]-ticks[-2])/2)
+        else:
+            ax.set_xlim((ticks[0]+ticks[-1])/2-(globals.no_growth_th_v+1)/2, (ticks[0]+ticks[-1])/2 +(globals.no_growth_th_v+1)/2)
+
+        if not ci:
+            ax.legend([],[], fontsize=globals.fontsize_legend, loc=best_legend_pos_exclude_list(ax))
+
+    return fig, axes
 
 def _replace_status_values(ser):
     """
@@ -1444,6 +1693,18 @@ def bin_continuous(
     binned = {}
     for bin in unique_values:
         bin_index = np.where(bin_values == bin)
+        nbins -= 1
+        bin_values, unique_values, bin_size = resize_bins(sorted, nbins)
+
+    # use metadata to sort dataframe
+    df = pd.concat([df, metadata_values], axis=1).sort_values(meta_key)
+    df.drop(columns=meta_key, inplace=True)
+    # put binned data in dataframe
+    binned = {}
+    for bin in unique_values:
+        bin_index = np.where(bin_values == bin)
+        bin_sorted = sorted[bin_index]
+        bin_df = df.iloc[bin_index]
         bin_sorted = sorted[bin_index]
         bin_df = df.iloc[bin_index]
         bin_label = "{:.2f}-{:.2f} {}".format(min(bin_sorted), max(bin_sorted),
@@ -1826,24 +2087,28 @@ def bplot_catplot(to_plot,
         y = metadata_name
 
         # add N points to the axis labels
-    to_plot = add_cat_info(to_plot, metadata_name=metadata_name)
+    to_plot = add_cat_info(to_plot, metadata_name=metadata_name).sort_values("Dataset", ascending=True)
     
     if not 'widths' in kwargs:
         # Automatically size boxplot width to number of Datasetcombinations
         widths = 0.8/to_plot.Dataset.nunique()
+
+    unique_combos = to_plot.set_index(np.arange(to_plot.index.size))["Dataset"].unique()
+    palette = get_palette_for(unique_combos)
 
     box = sns.boxplot(
         x=x,
         y=y,
         hue="Dataset",
         data=to_plot.set_index(np.arange(to_plot.index.size)),
-        palette="Set2",
+        palette=palette,
         ax=axis,
         showfliers=False,
         orient=orient,
         widths=widths,
         dodge=True
     )
+    capsizing(box, orient=orient, iterative=False)
 
     grouped = to_plot.groupby([metadata_name, "Dataset"])
     single_obs_data = grouped.filter(lambda x: len(x) == 1)
@@ -1864,7 +2129,7 @@ def bplot_catplot(to_plot,
             y=y,
             hue="Dataset",
             data=single_obs_data.set_index(np.arange(single_obs_data.index.size)),
-            palette="Set2",  # Same palette as boxplot
+            palette=palette,  # Same palette as boxplot
             ax=axis,
             size=point_size,         # Point size
             dodge=True,     # This aligns the points with their respective boxes
@@ -2199,7 +2464,7 @@ def mapplot(
                              scl_short=scl_short)
 
     #if legend wasn't created yet creat one  
-    if ax.get_legend() is None:
+    if (ax.get_legend() is None) and (ref_short in globals.scattered_datasets):
         ax.legend(borderpad = 0.6)
         
     return fig, ax
@@ -2501,7 +2766,7 @@ class ClusteredBoxPlot:
         # xticklabel and legend label templates
         # self.xticklabel_template = "{tsw}:\n{dataset_name}\n({dataset_version})\nVariable: {variable_name} [{unit}]\n Median: {median:.3e}\n IQR: {iqr:.3e}\nN: {count}"
         self.xticklabel_template = "Median: {median:.3e}\n IQR: {iqr:.3e}\nN: {count}"
-        self.label_template = "{dataset_name} ({dataset_version})\nVariable: {variable_name} [{unit}]"
+        self.label_template = "{dataset_name} [{unit}]"
 
     @staticmethod
     def centers_and_widths(
@@ -2583,10 +2848,10 @@ class ClusteredBoxPlot:
         if 'figsize' in fig_kwargs:
             _fig = plt.figure(figsize=fig_kwargs['figsize'])
         else:
-            _fig = plt.figure(figsize=(15, 10.5))
+            _fig = plt.figure(figsize=(globals.boxplot_height_vertical, globals. boxplot_width_vertical))
 
         if not incl_median_iqr_n_axs:
-            ax_box = _fig.add_subplot(111)
+            ax_box = _fig.add_axes([globals.ax_left, globals.ax_bottom, globals.ax_width, globals.ax_height])
             ax_median, ax_iqr, ax_n = None, None, None
 
         if incl_median_iqr_n_axs:
@@ -2617,15 +2882,6 @@ class ClusteredBoxPlot:
                 _ax.spines['top'].set_visible(False)
             except AttributeError:
                 pass
-        
-        if globals.draw_logo:
-            add_logo_to_figure(
-                fig=_fig,
-                logo_path=globals.logo_pth,
-                position=globals.logo_position,
-                offset=globals.logo_offset_comp_plots,
-                size=globals.logo_size,
-            )
 
         return ClusteredBoxPlotContainer(fig=_fig,
                                          ax_box=ax_box,

@@ -10,6 +10,7 @@ import matplotlib
 import matplotlib.colors as cl
 import numpy as np
 import colorcet
+import seaborn as sns
 import os
 
 # PLOT DEFAULT SETTINGS
@@ -19,12 +20,19 @@ index_names = ['lat', 'lon',
                'gpi']  # Names used for 'latitude' and 'longitude' coordinate.
 time_name = 'time'  # not used at the moment, dropped on load
 period_name = 'period'  # not used at the moment, dropped on load
+no_print_period = ["bulk"] # List of period names which should not be printed in the title
 
 dpi_min = 100  # Resolution in which plots are going to be rendered.
 dpi_max = 200
 title_pad = 12  # Padding below the title in points. default padding is matplotlib.rcParams['axes.titlepad'] = 6.0
 data_crs = ccrs.PlateCarree()  # Default map projection. use one of
 legend_alpha = 0.7
+ci_alpha = 0.4
+
+palette = sns.color_palette("Set2") #seaborn color palette used for dataset combination --> colors.py, colorblindfriendly options "Set2", "Dark2", "colorblind", ("Paired" not really useable in this case)
+exclude_from_palette = [6] # index of colors which you want removed from the set (depends on n_colors), for example 6 for "Set2" due to it just being not so nice to look at
+color_palette_combinations = [c for i, c in enumerate(palette) if i not in exclude_from_palette]
+palette_2 = sns.color_palette("Dark2") #if more combinations than len(color_palette_combinations)
 
 # === font defaults ===
 fontsize_title = 18
@@ -66,25 +74,37 @@ grid_intervals = [
     0.1, 0.2, 0.5, 1, 2, 5, 10, 30
 ]  # grid spacing in degree to choose from (plotter will try to make 5 gridlines in the smaller dimension)
 
+map_land_color = "#E7E2D6"
+map_water_color = "#e0f7fa"
+
 # === boxplot_basic defaults ===
 boxplot_height = 7 #$ increased by 1 to house logo
 boxplot_width = 2.1  # times (n+1), where n is the number of boxes.
 
 orient_th = 0 # If more number of bins > orient_th change to horizontal plot
 
-boxplot_height_horizontal = 10
+boxplot_height_horizontal = 7.5
 boxplot_width_horizontal = 12.5
 
+n_boxplots_in_row = 5
+
 bin_th = 2
-meta_bin_th = 20 # Above the threshold the figure height gets changes dynamically relative to # of bins
+meta_bin_th = 15 # Above the threshold the figure height gets changes dynamically relative to # of bins
 no_growth_th_v = 1 # If equal or less bins than no_growth_th_v (vertical) the figure ylims get adjusted to not get gigantic boxes
-no_growth_th_h = 3 # If equal or less bins than no_growth_th_h (horizontal) the figure xlims get adjusted to not get gigantic boxes
+no_growth_th_h = 2 # If equal or less bins than no_growth_th_h (horizontal) the figure xlims get adjusted to not get gigantic boxes
 
 boxplot_height_vertical = 7.5
 boxplot_width_vertical = 5
 
+period_bin_th = 6 # Above the threshold the figure height gets changes dynamically relative to # of bins
+
 boxplot_edgecolor = "#000000" # color of the edgeline of the boxplot
 boxplot_edgewidth = 1 # width of edgeline of boxplot
+cap_factor = 2/3
+
+boxplot_new_coloring = True
+hatch_linewidth = 1.5
+num_hatches = 30
 boxplot_printnumbers = True  # Print 'median', 'nObs', 'stdDev' to the boxplot_basic.
 
 #TODO: remove eventually, as watermarlk string no longer needed
@@ -134,7 +154,7 @@ leg_loc_dict = {
     "center": 10} # Dictionary mapping legend location to corresponding numbers
 
 pos_logo_lut = {f"{i}_{j}_{k}":leg_loc_dict[f"{j} {k}"] for i in rel_to_plot for j in va_l for k in ha_l}
-leg_loc_forbidden = [0, 6, 7, 8, 9, 10, pos_logo_lut[logo_position]] # Positions where no legend placement is allowed
+leg_loc_forbidden = [0, 5, 6, 7, 8, 9, 10, pos_logo_lut[logo_position]] # Positions where no legend placement is allowed
 
 # === filename template ===
 ds_fn_templ = "{i}-{ds}.{var}"
@@ -222,9 +242,9 @@ _cclasses_new = {
     'qua_neutr':
     get_status_colors(),  # qualitative category with 2 forced colors
     # Added colormaps for slope metrics
-    'div_slopeBIAS': colorcet.m_bjy,  # diverging colormap for slopeBIAS
-    'div_slopeR': colorcet.m_bjy,  # diverging colormap for slopeR
-    'div_slopeURMSD': colorcet.m_bjy  # diverging colormap for slopeURMSD
+    'div_slopeBIAS': colorcet.m_CET_D13,  # diverging colormap for slopeBIAS
+    'div_slopeR': colorcet.m_CET_D13,  # diverging colormap for slopeR
+    'div_slopeURMSD': colorcet.m_CET_D13  # diverging colormap for slopeURMSD
 }
 _cclasses = _cclasses_new
 
@@ -322,6 +342,7 @@ _ds_pretty_name_attr = 'val_dc_dataset_pretty_name{:d}'  # attribute convention 
 _version_short_name_attr = 'val_dc_version{:d}'  # attribute convention for other datasets
 _version_pretty_name_attr = 'val_dc_version_pretty_name{:d}'  # attribute convention for other datasets
 _val_dc_variable_pretty_name = 'val_dc_variable_pretty_name{:d}'  # attribute convention for variable name
+_val_dc_unit = 'val_dc_unit{:d}'
 
 # format should have (metric, ds, ref, other ds)
 _variable_pretty_name = {
@@ -349,7 +370,7 @@ _metric_value_ranges = {  # from /qa4sm/validator/validation/graphics.py
     'mse_bias': [0, None],
     'mse_var': [0, None],
     'snr': [None, None],
-    'err_std': [None, None],
+    'err_std': [0, None],
     'beta': [None, None],
     'status': [-1, len(status)-2],
     'slopeR': [None, None],
@@ -390,52 +411,6 @@ _metric_description = {  # from /qa4sm/validator/validation/graphics.py
     'slopeURMSD': ' in {} per decade',
     'slopeBIAS': ' in {} per decade',
 }
-
-
-# units for all datasets
-def get_metric_units(dataset, raise_error=False):
-    # function to get m.u. with possibility to raise error
-    _metric_units = {  # from /qa4sm/validator/validation/graphics.py
-        'ISMN': 'm³/m³',
-        'C3S': 'm³/m³',  # old name
-        'C3S_combined': 'm³/m³',
-        'C3S_active': '% saturation',
-        'C3S_passive': 'm³/m³',
-        'C3S_rzsm': 'm³/m³',
-        'GLDAS': 'm³/m³',
-        'ASCAT': '% saturation',
-        'SMAP': 'm³/m³',   # old name
-        'SMAP_L3': 'm³/m³',
-        'ERA5': 'm³/m³',
-        'ERA5_LAND': 'm³/m³',
-        'ESA_CCI_SM_active': '% saturation',
-        'ESA_CCI_SM_combined': 'm³/m³',
-        'ESA_CCI_SM_passive': 'm³/m³',
-        'ESA_CCI_RZSM': 'm³/m³',
-        'SMOS': 'm³/m³',   # old name
-        'SMOS_IC': 'm³/m³',
-        'CGLS_CSAR_SSM1km': '% saturation',
-        'CGLS_SCATSAR_SWI1km': '% saturation',
-        'SMOS_L3': 'm³/m³',
-        'SMOS_L2': 'm³/m³',
-        'SMAP_L2': 'm³/m³',
-        'SMOS_SBPCA': 'm³/m³',
-    }
-
-    unit = _metric_units.get(dataset)
-
-    if unit is None:
-        if raise_error:
-            raise KeyError(f"The dataset '{dataset}' has not been specified in {__name__}.")
-        else:
-            warnings.warn(
-                f"The dataset '{dataset}' has not been specified in {__name__}. "
-                "Set 'raise_error' to True to raise an exception for this case.",
-                UserWarning
-            )
-            return "n.a."
-
-    return unit
 
 COMMON_METRICS = {
     'R': 'Pearson\'s r',
