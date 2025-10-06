@@ -595,6 +595,8 @@ class QA4SMComparison:
             glob.get_metric_units(ref_ds))
         figwidth = glob.boxplot_width * (len(df.columns) + 1)
         figsize = [figwidth, glob.boxplot_height]
+        df = df.reset_index().melt(id_vars = ["lat", "lon", "gpi"], var_name = "label", value_name="value").sort_values("label")
+        df["validation"] = [df["label"][i].split("Val")[1][:1] if len(df["label"][i].split("Val")) == 2 else f"{df["label"][i].split("Val")[1][:1]} - {df["label"][i].split("Val")[2][:1]}" for i in df.index]
         fig, axes = plm.boxplot(
             df,
             ci=ci,
@@ -605,9 +607,12 @@ class QA4SMComparison:
         fonts = {"fontsize": 12}
         title_plot = "Comparison of {} {}\nagainst the reference {}".format(
             Metric.pretty_name, um, self.ref["pretty_title"])
-        axes.set_title(title_plot, pad=glob.title_pad, **fonts)
+        axes[0].set_title(title_plot, pad=glob.title_pad, **fonts)
 
-        plm.make_watermark(fig, glob.watermark_pos, offset=0.04)
+        plm.add_logo_in_bg_front(fig, 
+                                 logo_path=glob.logo_pth,
+                                 position=glob.logo_position,
+                                 size=glob.logo_size)
         plt.tight_layout()
 
     def diff_mapplot(self, metric: str, **kwargs):

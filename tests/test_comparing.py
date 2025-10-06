@@ -177,7 +177,7 @@ def test_common_metrics(double_img_paths, double_img_overlap):
         # 'tau': 'Kendall rank correlation',
         'mse_bias': 'Mean square error bias',
         'p_rho': "Spearman's ρ p-value",
-        'BIAS': 'Bias (difference of means)',
+        'BIAS': 'Bias',
         'urmsd': 'Unbiased root-mean-square deviation',
         'mse_var': 'Mean square error variance'
     }
@@ -207,7 +207,7 @@ def test_get_data(double_img_overlap):
     data, ci = double_img_overlap._get_data("R").values()
     assert len(data) == 2
     data = data[0]
-    name_should = 'Val0: 1-C3S (v202012) '
+    name_should = 'Val0: 0 & 1 '
     assert data.name == name_should
     data_should = [
         0.679918, 0.707091, 0.713081, 0.808353, 0.700307, 0.852756, 0.714132,

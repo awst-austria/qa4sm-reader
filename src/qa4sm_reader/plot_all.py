@@ -13,6 +13,75 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+def plot_comparison(comparison_periods, 
+                    filepath, 
+                    out_dir=None, 
+                    out_type = 'png', 
+                    metrics = None):
+    """
+    Generate clustered comparison boxplots for given metrics across comparison periods.
+
+    This function creates and saves boxplots that compare metrics across 
+    different validation periods. If the default time series window (TSW) 
+    is included along with other comparison periods, and stability metrics 
+    are available, a clustered boxplot is generated for each valid metric.
+
+    Parameters
+    ----------
+    comparison_periods : list of str
+        List of comparison periods (e.g., ['bulk', '2001', '2002']).
+        If `globals.DEFAULT_TSW` is included and more than one period 
+        is given, boxplots are generated.
+    filepath : str
+        path to the *.nc file to be processed.
+    out_dir : str, optional (default: None)
+        Path to output generated plot. If None, defaults to the current working directory.
+    out_type: str or list
+        extensions which the files should be saved in
+    metrics : dict
+        Dictionary of metrics available for plotting, 
+        typically provided by the validation framework.
+
+    Returns
+    -------
+    fnames_cbplot : list of Path
+        List of file paths to the saved clustered boxplots.
+
+    See Also
+    --------
+    QA4SMCompPlotter : Class used to generate the comparison boxplots.
+    """
+    fnames_cbplot = []
+    if isinstance(out_type, str):
+        out_type = [out_type]
+    metrics_not_to_plot = list(set(chain(globals._metadata_exclude, globals.metric_groups['triple'], ['n_obs']))) # metadata, tcol metrics, n_obs
+    img = QA4SMImg(filepath,
+                            period=comparison_periods[0],
+                            ignore_empty=True,
+                            metrics=metrics,
+                            engine='h5netcdf')
+    if globals.DEFAULT_TSW in comparison_periods and len(comparison_periods) > 1:
+        #check if stability metrics where calculated
+        stability = all(item.isdigit() for item in comparison_periods if item != 'bulk')
+        cbp = QA4SMCompPlotter(filepath)
+        comparison_boxplot_dir = os.path.join(out_dir, globals.CLUSTERED_BOX_PLOT_OUTDIR)
+        os.makedirs(comparison_boxplot_dir, exist_ok=True)
+
+        for available_metric in cbp.metric_kinds_available:
+            if available_metric in metrics.keys(
+            ) and available_metric not in metrics_not_to_plot:
+
+                spth = [Path(out_dir) / globals.CLUSTERED_BOX_PLOT_OUTDIR /
+                        f'{globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=available_metric, filetype=_out_type)}'
+                        for _out_type in out_type]
+                _fig = cbp.plot_cbp(
+                    chosen_metric=available_metric,
+                    out_name=spth,
+                    stability=stability
+                )
+                plt.close(_fig)
+                fnames_cbplot.extend(spth)
+    return fnames_cbplot
 
 def plot_all(filepath: str,
              temporal_sub_windows: List[str] = None,
@@ -71,8 +140,6 @@ def plot_all(filepath: str,
     fnames_cbplot: list
         list of filenames for created comparison boxplots
     """
-
-
     if isinstance(save_metadata, bool):
         if not save_metadata:
             save_metadata = 'never'
@@ -95,7 +162,7 @@ def plot_all(filepath: str,
     else:
         periods = np.array(temporal_sub_windows)
     # Filter out all items that are purely digits 
-    # Needs to be here because when qa4sm-validaion is run the temporal_sub_windows is not None
+    # Needs to be here because when qa4sm-validation is run the temporal_sub_windows is not None
     comparison_periods = periods
     periods = [period for period in periods if not period.isdigit()]
 
@@ -151,31 +218,32 @@ def plot_all(filepath: str,
 
     #$$
     # ? move somewhere else?
-    fnames_cbplot = []
-    if isinstance(out_type, str):
-        out_type = [out_type]
-    metrics_not_to_plot = list(set(chain(globals._metadata_exclude, globals.metric_groups['triple'], ['n_obs']))) # metadata, tcol metrics, n_obs
-    if globals.DEFAULT_TSW in comparison_periods and len(comparison_periods) > 1:
-        #check if stability metrics where calculated
-        stability = all(item.isdigit() for item in comparison_periods if item != 'bulk')
-        cbp = QA4SMCompPlotter(filepath)
-        comparison_boxplot_dir = os.path.join(out_dir, globals.CLUSTERED_BOX_PLOT_OUTDIR)
-        os.makedirs(comparison_boxplot_dir, exist_ok=True)
+    fnames_cbplot = plot_comparison(comparison_periods, filepath, out_dir, out_type, metrics)
+    # fnames_cbplot = []
+    # if isinstance(out_type, str):
+    #     out_type = [out_type]
+    # metrics_not_to_plot = list(set(chain(globals._metadata_exclude, globals.metric_groups['triple'], ['n_obs']))) # metadata, tcol metrics, n_obs
+    # if globals.DEFAULT_TSW in comparison_periods and len(comparison_periods) > 1:
+    #     #check if stability metrics where calculated
+    #     stability = all(item.isdigit() for item in comparison_periods if item != 'bulk')
+    #     cbp = QA4SMCompPlotter(filepath)
+    #     comparison_boxplot_dir = os.path.join(out_dir, globals.CLUSTERED_BOX_PLOT_OUTDIR)
+    #     os.makedirs(comparison_boxplot_dir, exist_ok=True)
 
-        for available_metric in cbp.metric_kinds_available:
-            if available_metric in metrics.keys(
-            ) and available_metric not in metrics_not_to_plot:
+    #     for available_metric in cbp.metric_kinds_available:
+    #         if available_metric in metrics.keys(
+    #         ) and available_metric not in metrics_not_to_plot:
 
-                spth = [Path(out_dir) / globals.CLUSTERED_BOX_PLOT_OUTDIR /
-                        f'{globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=available_metric, filetype=_out_type)}'
-                        for _out_type in out_type]
-                _fig = cbp.plot_cbp(
-                    chosen_metric=available_metric,
-                    out_name=spth,
-                    stability=stability
-                )
-                plt.close(_fig)
-                fnames_cbplot.extend(spth)
+    #             spth = [Path(out_dir) / globals.CLUSTERED_BOX_PLOT_OUTDIR /
+    #                     f'{globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=available_metric, filetype=_out_type)}'
+    #                     for _out_type in out_type]
+    #             _fig = cbp.plot_cbp(
+    #                 chosen_metric=available_metric,
+    #                 out_name=spth,
+    #                 stability=stability
+    #             )
+    #             plt.close(_fig)
+    #             fnames_cbplot.extend(spth)
 
     return fnames_bplot, fnames_mapplot, fnames_csv, fnames_cbplot
 

@@ -436,7 +436,7 @@ def custom_mapplot(
                 cmap.set_over("red")
 
     # initialize plot
-    fig, ax, cax = init_plot(figsize, dpi, add_cbar, projection)
+    fig, ax = init_plot(figsize, add_cbar, projection)
     ax.coastlines()
     ax.add_feature(cfeature.BORDERS, linestyle=":")
     ax.add_feature(cfeature.LAND, facecolor="lightgray", edgecolor="black")
@@ -504,18 +504,18 @@ def custom_mapplot(
 
     if add_cbar:  # colorbar
         try:
-            _make_cbar(fig,
+            _, _, cax = _make_cbar(fig,
+                       ax,
                        im,
-                       cax,
                        ref_short,
                        metric,
                        label=label,
                        diff_map=diff_map,
                        scl_short=scl_short)
         except:
-            _make_cbar(fig,
+            _, _, cax = _make_cbar(fig,
+                       ax,
                        im,
-                       cax,
                        ref_short,
                        metric.split('_')[0],
                        label=label,

@@ -9,6 +9,8 @@ import cartopy.crs as ccrs
 import matplotlib
 import matplotlib.colors as cl
 import numpy as np
+import colorcet
+import seaborn as sns
 import os
 
 # PLOT DEFAULT SETTINGS
@@ -18,35 +20,93 @@ index_names = ['lat', 'lon',
                'gpi']  # Names used for 'latitude' and 'longitude' coordinate.
 time_name = 'time'  # not used at the moment, dropped on load
 period_name = 'period'  # not used at the moment, dropped on load
+no_print_period = ["bulk"] # List of period names which should not be printed in the title
 
 dpi_min = 100  # Resolution in which plots are going to be rendered.
 dpi_max = 200
-title_pad = 12.0  # Padding below the title in points. default padding is matplotlib.rcParams['axes.titlepad'] = 6.0
+title_pad = 12  # Padding below the title in points. default padding is matplotlib.rcParams['axes.titlepad'] = 6.0
 data_crs = ccrs.PlateCarree()  # Default map projection. use one of
+legend_alpha = 0.7
+ci_alpha = 0.4
+
+palette = sns.color_palette("Set2") #seaborn color palette used for dataset combination --> colors.py, colorblindfriendly options "Set2", "Dark2", "colorblind", ("Paired" not really useable in this case)
+exclude_from_palette = [6] # index of colors which you want removed from the set (depends on n_colors), for example 6 for "Set2" due to it just being not so nice to look at
+color_palette_combinations = [c for i, c in enumerate(palette) if i not in exclude_from_palette]
+color_palette_combinations_2 = sns.color_palette("Dark2") #if more combinations than len(color_palette_combinations)
+
+# === font defaults ===
+fontsize_title = 18
+fontsize_label = 16
+fontsize_ticklabel = 12
+fontsize_legend = 12
+
+# === Aggregate subplots defaults ===
+n_col_agg = 2
+max_subplots = 20
+
+# === axis defaults ===
+ax_left = 0.2
+ax_bottom = 0.15
+ax_width = 0.75
+ax_height = 0.8
 
 # === map plot defaults ===
 scattered_datasets = [
     'ISMN'
-]  # dataset names which require scatterplots (values is scattered in lat/lon) fallback for legacy validations
-# currently handled in Dataset model that are passed to the global attrs of the nc file (val_is_scattered_data)
-map_figsize = [11.32, 6.10]  # size of the output figure in inches.
-naturalearth_resolution = '110m'  # One of '10m', '50m' and '110m'. Finer resolution slows down plotting. see https://www.naturalearthdata.com/
+]  # dataset names which require scatterplots (values is scattered in lat/lon)
+map_figsize = [10, 7.5]  # size of the output figure in inches.
+map_ax_left = 0.1
+map_ax_bottom = 0.2
+map_ax_width = 0.8
+map_ax_height = 0.75
+
+cax_width =0.03
+
+resolution_th = [5, 30] # If one of the axis has an extent [°] below the thresholds change to finer resolution 
+naturalearth_resolution = ["10m",'50m','110m']  # One of '10m', '50m' and '110m'. Finer resolution slows down plotting. see https://www.naturalearthdata.com/
 crs = ccrs.PlateCarree(
 )  # projection. Must be a class from cartopy.crs. Note, that plotting labels does not work for most projections.
-markersize = 4  # diameter of Marker in points.
+min_markersize = 26 # min area of Marker in pixels
+max_markersize = 300 # max area of Marker in points
+nan_markersize = 16 # area of Marker for nan staions
 map_pad = 0.15  # padding relative to map height.
+min_gridlines = 4 # Minimum number of gridlines for each axis, if map too small no gridlines drawn
 grid_intervals = [
-    2, 5, 10, 30
+    0.1, 0.2, 0.5, 1, 2, 5, 10, 30
 ]  # grid spacing in degree to choose from (plotter will try to make 5 gridlines in the smaller dimension)
-max_title_len = 8 * map_figsize[
-    0]  # maximum length of plot title in chars. if longer, it will be broken in multiple lines.
+
+map_land_color = "#E7E2D6"
+map_water_color = "#e0f7fa"
 
 # === boxplot_basic defaults ===
-boxplot_printnumbers = True  # Print 'median', 'nObs', 'stdDev' to the boxplot_basic.
 boxplot_height = 7 #$ increased by 1 to house logo
 boxplot_width = 2.1  # times (n+1), where n is the number of boxes.
-boxplot_title_len = 8 * boxplot_width  # times the number of boxes. maximum length of plot title in chars.
-tick_size = 8.5
+
+orient_th = 0 # If more number of bins > orient_th change to horizontal plot
+
+boxplot_height_horizontal = 7.5
+boxplot_width_horizontal = 12.5
+
+n_boxplots_in_row = 5
+
+bin_th = 2
+meta_bin_th = 15 # Above the threshold the figure height gets changes dynamically relative to # of bins
+no_growth_th_v = 1 # If equal or less bins than no_growth_th_v (vertical) the figure ylims get adjusted to not get gigantic boxes
+no_growth_th_h = 2 # If equal or less bins than no_growth_th_h (horizontal) the figure xlims get adjusted to not get gigantic boxes
+
+boxplot_height_vertical = 7.5
+boxplot_width_vertical = 5
+
+period_bin_th = 6 # Above the threshold the figure height gets changes dynamically relative to # of bins
+
+boxplot_edgecolor = "#000000" # color of the edgeline of the boxplot
+boxplot_edgewidth = 1 # width of edgeline of boxplot
+cap_factor = 2/3
+
+boxplot_new_coloring = True
+hatch_linewidth = 1.5
+num_hatches = 30
+boxplot_printnumbers = True  # Print 'median', 'nObs', 'stdDev' to the boxplot_basic.
 
 #TODO: remove eventually, as watermarlk string no longer needed
 # === watermark defaults ===
@@ -56,27 +116,46 @@ watermark_fontsize = 8  # fontsize in points (matplotlib uses 72ppi)
 watermark_pad = 50  # padding above/below watermark in points (matplotlib uses 72ppi)
 
 #$$
-# === watermark logo defaults ===
-watermark_logo_position = 'lower_center'
-watermark_logo_scale = 0.1  # height of the logo relative to the height of the figure
-watermark_logo_offset_comp_plots = (0, -0.1)
-watermark_logo_offset_metadata_plots = (0, -0.08)
-watermark_logo_offset_map_plots = (0, -0.15)
-watermark_logo_offset_bar_plots = (0, -0.1)
-watermark_logo_offset_box_plots = (0, -0.15)
-watermark_logo_pth = os.path.join(
+# === logo defaults ===
+rel_to_plot = ["front", "bg", "side"] # Possible positions relative to ax
+va_l = ["lower", "center", "upper"] # Possible vertical alignment
+ha_l = ["left", "center", "right"] # Possible horizontal alignment
+
+draw_logo = True
+logo_position = 'front_lower_right' # of format rel_to_plot[i]+"_"+va_l[j]+"_"+ha_l[k]
+n_col_logo = 1 # Number of columns forlogos
+n_logo = n_col_logo*1 # Number of logos to draw for position in ["bg", "in_front"]
+logo_alpha = 0.7
+logo_rotation = 0
+logo_pad = 0.01 # Percent of ax
+logo_size = 30  # height of the logo in pt
+logo_offset_comp_plots = (0, -0.1)
+logo_offset_metadata_plots = (0, -0.08)
+logo_offset_map_plots = (0, -0.15)
+logo_offset_bar_plots = (0, -0.1)
+logo_offset_box_plots = (0, -0.15)
+logo_pth = os.path.join(
     os.path.dirname(
         os.path.abspath(__file__)), 'static', 'images', 'logo',
-    'QA4SM_logo_long.png')
+    'qa4sm_logo_long.webp')
 
-# === metadata network defaults ===
-meta_network_base_font_size = 0.9
-meta_network_font_scale_rate = 0.04
-meta_network_boxplot_width = 12.6
-meta_network_width_scale_rate = 0.34
-meta_network_boxplot_height = 5
-meta_network_boxplot_height_scale_factor = 0.5
-meta_network_increase_padding_rate = 1.4
+# Repositioning of legend if at same position as logo
+leg_loc_dict = {
+    "best": 0,
+    "upper right": 1,
+    "upper left": 2,
+    "lower left": 3,
+    "lower right": 4,
+    "right": 5,
+    "center left": 6,
+    "center right": 7,
+    "lower center": 8,
+    "upper center": 9,
+    "center center": 10,
+    "center": 10} # Dictionary mapping legend location to corresponding numbers
+
+pos_logo_lut = {f"{i}_{j}_{k}":leg_loc_dict[f"{j} {k}"] for i in rel_to_plot for j in va_l for k in ha_l}
+leg_loc_forbidden = [0, 5, 6, 7, 8, 9, 10, pos_logo_lut[logo_position]] # Positions where no legend placement is allowed
 
 # === filename template ===
 ds_fn_templ = "{i}-{ds}.{var}"
@@ -128,7 +207,8 @@ def get_status_colors():
     cmap = cl.ListedColormap(colors=colors)
     return cmap
 
-_cclasses = {
+# old cclasses
+_cclasses_old = {
     'div_better': matplotlib.colormaps[
         'RdYlBu'
     ],  # diverging: 1 good, 0 special, -1 bad (pearson's R, spearman's rho')
@@ -142,9 +222,6 @@ _cclasses = {
     ],  # sequential: increasing value bad (p_R, p_rho, rmsd, ubRMSD, RSS)
     'seq_better': matplotlib.colormaps[
         'YlGn'],  # sequential: increasing value good (n_obs, STDerr)
-    'qua_neutr':
-    get_status_colors(),  # qualitative category with 2 forced colors
-    # Added colormaps for slope metrics
     'div_slopeBIAS': matplotlib.colormaps[
         'RdBu_r'
     ],  # diverging colormap for slopeBIAS
@@ -155,6 +232,22 @@ _cclasses = {
         'PuOr'
     ]  # diverging colormap for slopeURMSD
 }
+    
+# new cclasses
+_cclasses_new = {
+    'div_better': colorcet.m_CET_D1A_r,  # diverging: 1 good, 0 special, -1 bad (pearson's R, spearman's rho')
+    'div_worse': colorcet.m_CET_D1A,  # diverging: 1 bad, 0 special, -1 good (difference of bias)
+    'div_neutr':colorcet.m_CET_D13,  # diverging: zero good, +/- neutral: (bias)
+    'seq_worse': colorcet.m_CET_L18,  # sequential: increasing value bad (p_R, p_rho, rmsd, ubRMSD, RSS)
+    'seq_better': colorcet.m_blues,  # sequential: increasing value good (n_obs, STDerr)
+    'qua_neutr':
+    get_status_colors(),  # qualitative category with 2 forced colors
+    # Added colormaps for slope metrics
+    'div_slopeBIAS': colorcet.m_CET_D13,  # diverging colormap for slopeBIAS
+    'div_slopeR': colorcet.m_CET_D13,  # diverging colormap for slopeR
+    'div_slopeURMSD': colorcet.m_CET_D13  # diverging colormap for slopeURMSD
+}
+_cclasses = _cclasses_new
 
 _colormaps = {  # from /qa4sm/validator/validation/graphics.py
     'R': _cclasses['div_better'],
@@ -250,6 +343,7 @@ _ds_pretty_name_attr = 'val_dc_dataset_pretty_name{:d}'  # attribute convention 
 _version_short_name_attr = 'val_dc_version{:d}'  # attribute convention for other datasets
 _version_pretty_name_attr = 'val_dc_version_pretty_name{:d}'  # attribute convention for other datasets
 _val_dc_variable_pretty_name = 'val_dc_variable_pretty_name{:d}'  # attribute convention for variable name
+_val_dc_unit = 'val_dc_unit{:d}'
 
 # format should have (metric, ds, ref, other ds)
 _variable_pretty_name = {
@@ -277,7 +371,7 @@ _metric_value_ranges = {  # from /qa4sm/validator/validation/graphics.py
     'mse_bias': [0, None],
     'mse_var': [0, None],
     'snr': [None, None],
-    'err_std': [None, None],
+    'err_std': [0, None],
     'beta': [None, None],
     'status': [-1, len(status)-2],
     'slopeR': [None, None],
@@ -318,7 +412,6 @@ _metric_description = {  # from /qa4sm/validator/validation/graphics.py
     'slopeURMSD': ' in {} per decade',
     'slopeBIAS': ' in {} per decade',
 }
-
 
 # units for all datasets
 def get_metric_units(dataset, raise_error=False):
@@ -369,7 +462,7 @@ COMMON_METRICS = {
     'R': 'Pearson\'s r',
     'p_R': 'Pearson\'s r p-value',
     'RMSD': 'Root-mean-square deviation',
-    'BIAS': 'Bias (difference of means)',
+    'BIAS': 'Bias',
     'n_obs': '# observations',
     'urmsd': 'Unbiased root-mean-square deviation',
     'RSS': 'Residual sum of squares',
@@ -410,6 +503,8 @@ STABILITY_METRICS = {
 _metric_name = {**COMMON_METRICS, **READER_EXCLUSIVE_METRICS, **TC_METRICS, **STABILITY_METRICS}
 
 METRICS = {**COMMON_METRICS, **QA4SM_EXCLUSIVE_METRICS}
+
+ALL_METRICS = {**COMMON_METRICS, **READER_EXCLUSIVE_METRICS, **TC_METRICS, **STABILITY_METRICS}
 
 NON_METRICS = [
     'gpi',
