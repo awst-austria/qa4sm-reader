@@ -648,7 +648,7 @@ def style_map(
                                                facecolor='none')
         ax.add_feature(borders, linewidth=0.5, zorder=3)
     if add_us_states:
-        ax.add_feature(cfeature.STATES, linewidth=0.1, zorder=3)
+        states = ax.add_feature(cfeature.STATES, linewidth=0.1, zorder=3)
 
     return ax
 
@@ -919,7 +919,7 @@ def add_logo_to_figure(
     bbox_fig = bbox.transformed(fig_trans)
 
     # If Figure has super positioned titles/labels include those in bounding box
-    extras: list[Bbox] = []
+    extras = []
     if fig._suptitle is not None:
         extras.append(fig._suptitle.get_window_extent(renderer).transformed(fig.transFigure.inverted()))
     if hasattr(fig, "_supxlabel") and fig._supxlabel is not None:
@@ -1366,7 +1366,13 @@ def boxplot(
     ax : matplotlib.axes.Axes
     """
     values = df.copy()
-    unique_combos = values["dataset"].unique()
+    if "dataset" in values.columns:
+        unique_combos = values["dataset"].unique()
+    elif "validation" in values.columns:
+        values["dataset"] = values["validation"]
+        unique_combos = values["dataset"].unique()
+    else:
+        raise ValueError("Boxplot has yet to be implemented for this case")
     # make plot
 
     axes = [axis]
@@ -1501,8 +1507,7 @@ def boxplot(
                     labels=["Upper CI", "Lower CI"],
                     fontsize=globals.fontsize_legend,
                     loc=best_legend_pos_exclude_list(ax))
-        if label is not None:
-            plt.ylabel(label, fontsize = globals.fontsize_label)
+
         positions = np.arange(len(ax_combos))
         ticklabels = values["label"].unique()[ax_i*globals.n_boxplots_in_row:(ax_i+1)*globals.n_boxplots_in_row]
         ax.set_xticks(positions)
@@ -1682,36 +1687,31 @@ def bin_continuous(
             "to a lower value to allow for smaller samples.")
     bin_values, unique_values, bin_size = resize_bins(sorted, nbins)
     # adjust bins to have the specified number of bins if possible, otherwise enough valoues per bin
-    while bin_size < min_size:
+    while bin_size < min_size and nbins > 1:
         nbins -= 1
         bin_values, unique_values, bin_size = resize_bins(sorted, nbins)
 
     # use metadata to sort dataframe
     df = pd.concat([df, metadata_values], axis=1).sort_values(meta_key)
     df.drop(columns=meta_key, inplace=True)
-    # put binned data in dataframe
-    binned = {}
-    for bin in unique_values:
-        bin_index = np.where(bin_values == bin)
-        nbins -= 1
-        bin_values, unique_values, bin_size = resize_bins(sorted, nbins)
 
-    # use metadata to sort dataframe
-    df = pd.concat([df, metadata_values], axis=1).sort_values(meta_key)
-    df.drop(columns=meta_key, inplace=True)
-    # put binned data in dataframe
+    # put binned data in dictionary
     binned = {}
     for bin in unique_values:
         bin_index = np.where(bin_values == bin)
         bin_sorted = sorted[bin_index]
         bin_df = df.iloc[bin_index]
-        bin_sorted = sorted[bin_index]
-        bin_df = df.iloc[bin_index]
-        bin_label = "{:.2f}-{:.2f} {}".format(min(bin_sorted), max(bin_sorted),
-                                              meta_units)
+
+        bin_label = "{:.2f}-{:.2f} {}".format(
+            float(np.min(bin_sorted)), float(np.max(bin_sorted)), meta_units
+        )
+
+        # check column counts (at least min_size values in each)
         if not all(col >= min_size for col in bin_df.count()):
             continue
+
         binned[bin_label] = bin_df
+
     # If too few points are available to make the plots
     if not binned:
         return None
@@ -1921,7 +1921,7 @@ def combine_depths(depth_dict: dict) -> pd.DataFrame:
     return depths_combined
 
 
-def aggregate_subplots(to_plot: dict, funct, n_bars, **kwargs):
+def aggregate_subplots(to_plot: dict, funct, **kwargs):
     """
     Aggregate multiple subplots into one image
 
@@ -1933,8 +1933,6 @@ def aggregate_subplots(to_plot: dict, funct, n_bars, **kwargs):
     funct: method
         function to create the individual subplots. Should have a parameter 'axis',
         where the plt.Axis can be given. Returns a tuple of (unit_height, unit_width)
-    n_bars: int
-        number of boxplot bars (one is central + confidence intervals)
     **kwargs: dict
         arguments to pass on to the plotting function
 
@@ -1943,6 +1941,13 @@ def aggregate_subplots(to_plot: dict, funct, n_bars, **kwargs):
     fig, axes
     """
     sub_n = len(to_plot.keys())
+    if sub_n > globals.max_subplots:
+        warnings.warn(
+            f"Number of subplots ({sub_n}) exceeds maximum allowed ({globals.max_subplots}). "
+            "Plot creation skipped.",
+            UserWarning
+        )
+        return None, None
     if sub_n == 1:
         for n, (bin_label, data) in enumerate(to_plot.items()):
             # fig = plt.figure()
@@ -1975,7 +1980,7 @@ def aggregate_subplots(to_plot: dict, funct, n_bars, **kwargs):
     return fig, np.array(fig.axes)
 
 
-def bplot_multiple(to_plot, y_axis, n_bars, **kwargs) -> tuple:
+def bplot_multiple(to_plot, **kwargs) -> tuple:
     """
     Create subplots for each metadata category/range
 
@@ -1983,10 +1988,6 @@ def bplot_multiple(to_plot, y_axis, n_bars, **kwargs) -> tuple:
     ----------
     to_plot : dict
         dictionary of {'bin name': Dataframe}
-    y_axis : str
-        Name of the x-axis
-    n_bars : int or float
-        Number of datasets/boxplot bars
     """
 
     if "axis" in kwargs.keys():
@@ -1994,7 +1995,6 @@ def bplot_multiple(to_plot, y_axis, n_bars, **kwargs) -> tuple:
 
     fig, axes = aggregate_subplots(to_plot=to_plot,
                                    funct=boxplot,
-                                   n_bars=n_bars,
                                    **kwargs)
 
     return fig, axes
@@ -2033,7 +2033,7 @@ def add_cat_info(to_plot: pd.DataFrame, metadata_name: str) -> pd.DataFrame:
 
 
 def bplot_catplot(to_plot,
-                  y_axis,
+                  axis_name,
                   metadata_name,
                   axis=None,
                   **kwargs) -> tuple:
@@ -2044,8 +2044,8 @@ def bplot_catplot(to_plot,
     ----------
     to_plot: pd.Dataframe
         Seaborn-formatted dataframe
-    y_axis: str
-        Name of the x-axis
+    axis_name: str
+        Name of the value-axis
     metadata_name: str
         Name of the metadata type
     axis : matplotlib.axes.Axis, optional
@@ -2148,7 +2148,7 @@ def bplot_catplot(to_plot,
         box.set_yticklabels(y_labels_fixed, fontsize=globals.fontsize_ticklabel)
 
     if orient == "v":
-        axis.set_ylabel(y_axis, fontsize=globals.fontsize_label)
+        axis.set_ylabel(axis_name, fontsize=globals.fontsize_label)
         axis.xaxis.label.set_fontsize(globals.fontsize_label)
 
         ticks = axis.get_xticks()
@@ -2164,7 +2164,7 @@ def bplot_catplot(to_plot,
             axis.set_xlim((ticks[0]+ticks[-1]-globals.no_growth_th_v-1)/2, (ticks[0]+ticks[-1]+globals.no_growth_th_v+1)/2)
 
     if orient == "h":
-        axis.set_xlabel(y_axis, fontsize=globals.fontsize_label)
+        axis.set_xlabel(axis_name, fontsize=globals.fontsize_label)
         axis.yaxis.label.set_fontsize(globals.fontsize_label)
 
         ticks = axis.get_yticks()
@@ -2273,9 +2273,8 @@ def boxplot_metadata(
 
     out = generate_plot(
         to_plot=to_plot,
-        y_axis=ax_label,
+        axis_name=ax_label,
         metadata_name=meta_key,
-        n_bars=len(df.columns),
         axis=axis,
         **bplot_kwargs,
     )
@@ -2373,10 +2372,10 @@ def mapplot(
             cmap = copy.copy(cmap)
             if mask_under is not None:
                 v_min = mask_under
-                cmap.set_under("red")
+                cmap.set_under("pink")
             if mask_over is not None:
                 v_max = mask_over
-                cmap.set_over("red")
+                cmap.set_over("pink")
 
     # initialize plot
     fig, ax = init_plot(figsize, dpi, projection)
@@ -2494,7 +2493,7 @@ def plot_spatial_extent(
         plotting oprion for regular grids (satellites)
     grid_stepsize:
     """
-    fig, ax, cax = init_plot(figsize=globals.map_figsize, dpi=globals.dpi_min)
+    fig, ax = init_plot(figsize=globals.map_figsize, dpi=globals.dpi_min)
     legend_elements = []
     # plot polygons
     for n, items in enumerate(polys.items()):

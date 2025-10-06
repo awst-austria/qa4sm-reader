@@ -263,6 +263,8 @@ class QA4SMDatasets():
 
         # not from dataset.
         names['mu'] = self._fetch_attribute("_val_dc_unit", dc)
+        if names["mu"] == "":
+            names["mu"] = "{}".format(globals.get_metric_units(names['short_name']))
 
         # combined name for plots:
         names['pretty_title'] = '{} ({})'.format(names['pretty_name'],

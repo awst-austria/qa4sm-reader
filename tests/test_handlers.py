@@ -222,12 +222,12 @@ def test_get_tc_varmeta(tc_metrics):
     # n_obs has only the reference dataset
     assert tc_metrics["n_obs"].ismetric
     assert not tc_metrics["n_obs"].isempty
-    ref_ds, metric_ds, other_ds, _ = tc_metrics["n_obs"].get_varmeta()
+    ref_ds, metric_ds, other_ds, scl_ds, sref_ds = tc_metrics["n_obs"].get_varmeta()
     assert ref_ds[1]['short_name'] == 'ERA5_LAND'
     assert metric_ds == other_ds is None
 
     # R has only the reference and metric dataset
-    ref_ds, metric_ds, other_ds, _ = tc_metrics["r"].get_varmeta()
+    ref_ds, metric_ds, other_ds, scl_ds, sref_ds  = tc_metrics["r"].get_varmeta()
     assert ref_ds[0] == 3
     assert ref_ds[1]['short_name'] == 'ERA5_LAND'
     assert ref_ds[1]['pretty_name'] == 'ERA5-Land'
@@ -243,7 +243,7 @@ def test_get_tc_varmeta(tc_metrics):
     assert other_ds is None
 
     # p has all three datasets, it being a TC metric
-    ref_ds, metric_ds, other_ds, _ = tc_metrics["beta"].get_varmeta()
+    ref_ds, metric_ds, other_ds, scl_ds, sref_ds  = tc_metrics["beta"].get_varmeta()
     assert ref_ds[0] == 3
     assert ref_ds[1]['short_name'] == 'ERA5_LAND'
     assert ref_ds[1]['pretty_name'] == 'ERA5-Land'
@@ -270,12 +270,12 @@ def test_get_varmeta(basic_metrics):
     # n_obs
     assert basic_metrics["n_obs"].ismetric
     assert not basic_metrics["n_obs"].isempty
-    ref_ds, metric_ds, other_ds, _ = basic_metrics["n_obs"].get_varmeta()
+    ref_ds, metric_ds, other_ds, scl_ds, sref_ds  = basic_metrics["n_obs"].get_varmeta()
     assert ref_ds[1]['short_name'] == 'ISMN'
     assert metric_ds == other_ds is None
 
     # R
-    ref_ds, metric_ds, other_ds, _ = basic_metrics["r"].get_varmeta()
+    ref_ds, metric_ds, other_ds, scl_ds, sref_ds  = basic_metrics["r"].get_varmeta()
     assert ref_ds[0] == 6
     assert ref_ds[1]['short_name'] == 'ISMN'
     assert ref_ds[1]['pretty_name'] == 'ISMN'
@@ -290,7 +290,7 @@ def test_get_varmeta(basic_metrics):
     assert other_ds is None
 
     # p
-    ref_ds, metric_ds, other_ds, _ = basic_metrics["p"].get_varmeta()
+    ref_ds, metric_ds, other_ds, scl_ds, sref_ds  = basic_metrics["p"].get_varmeta()
     assert ref_ds[0] == 6
     assert ref_ds[1]['short_name'] == 'ISMN'
     assert ref_ds[1]['pretty_name'] == 'ISMN'

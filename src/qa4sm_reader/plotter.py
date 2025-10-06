@@ -368,8 +368,13 @@ class QA4SMPlotter:
                     diff = ci["upper"] - ci["lower"]
                     # Problem that nan values were making it impossiple to calculate the mean of the differences
                     # Therefore they were dropped before calculating means
-                    ci_range = float(diff.dropna().mean().mean())
-                    label = "\nMean CI range: {:.2g}".format(ci_range) if ci_range>0.01 else "\nMean CI Range: <0.01"
+                    # But if only nan-values were calculated no range could be calculated
+                    try:
+                        ci_range = float(diff.dropna().mean().mean())
+                        label = "\nMean CI range: {:.2g}".format(ci_range) if ci_range>0.01 else "\nMean CI Range: <0.01"
+                    except:
+                        ci_range = "nan"
+                        label = "\nMean CI range: nan".format(ci_range)
                 df.columns = [df.columns[0] + label]
             else:
                 ci = None
@@ -822,83 +827,6 @@ class QA4SMPlotter:
 
         else:
             return fig, ax
-
-    def boxplot_tc_old(self,
-                   metric: str,
-                   period: str = None,
-                   out_name: str = None,
-                   out_types: Optional[Union[List[str], str]] = 'png',
-                   save_files: bool = False,
-                   **plotting_kwargs) -> list:
-        """
-        Creates a boxplot for TC metrics. Saves a figure and returns Matplotlib fig and ax objects for
-        further processing.
-
-        Parameters
-        ----------
-        metric : str
-            metric that is collected from the file for all datasets and combined
-            into one plot.
-        out_name: str
-            name of output file
-        out_types: str or list of str, Optional
-            extensions which the files should be saved in. Default is 'png'
-        save_files: bool, optional. Default is False
-            wether to save the file in the output directory
-        plotting_kwargs: arguments for _boxplot_definition function
-
-        Returns
-        -------
-        fnames: list of file names with all the extensions
-        """
-        fnames = []
-        # group Vars and CIs relative to the same dataset
-        metric_tc, ci = {}, {}
-        for df, Var, var_ci in self._yield_values(metric=metric, tc=True):
-            id, names = Var.metric_ds
-            if var_ci is not None:
-                if id in ci.keys():
-                    ci[id].append(var_ci)
-                else:
-                    ci[id] = [var_ci]
-            if id in metric_tc.keys():
-                metric_tc[id][0].append(df)
-            else:
-                metric_tc[id] = [df], Var
-
-        for id, values in metric_tc.items():
-            dfs, Var = values
-            df = pd.concat(dfs)
-            # values are all Nan or NaNf - not plotted
-            if np.isnan(df.to_numpy()).all():
-                continue
-            # necessary if statement to prevent key error when no CIs are in the netCDF
-            if ci:
-                ci_id = ci[id]
-            else:
-                ci_id = None
-            # create plot
-            fig, ax = self._boxplot_definition(metric=metric,
-                                               df=df,
-                                               ci=ci_id,
-                                               type='boxplot_tc',
-                                               period=period,
-                                               Var=Var,
-                                               **plotting_kwargs)
-            # save. Below workaround to avoid same names
-            if not out_name:
-                save_name = self.create_filename(Var,
-                                                 type='boxplot_tc',
-                                                 period=period)
-            else:
-                save_name = out_name
-            # save or return plotting objects
-            if save_files:
-                fnames.extend(self._save_plot(save_name, out_types=out_types))
-                plt.close('all')
-
-        if save_files:
-            return fnames
         
     def boxplot_tc(self,
                    metric: str,
@@ -934,11 +862,13 @@ class QA4SMPlotter:
 
         for df, Var, var_ci in self._yield_values(metric=metric, tc=True):
             id = Var.metric_ds[0]
+            ref_ds, metric_ds, other_ds, _, _ = Var.get_varmeta()
             if var_ci is not None:
+                # var_ci["dataset"] = [f"{ref_ds[0]} & {other_ds[0]}" for i in range(len(var_ci))]
                 if id in ci.keys():
-                    ci[id] = pd.concat([ci[id], var_ci])
+                    ci[id][f"{ref_ds[0]} & {other_ds[0]}"]=var_ci
                 else:
-                    ci[id] = var_ci
+                    ci[id] = {f"{ref_ds[0]} & {other_ds[0]}":var_ci}
             if id in metric_tc.keys():
                 metric_tc[id][0].append(df)
             else:
@@ -948,13 +878,15 @@ class QA4SMPlotter:
             dfs, Var = values
             df = pd.concat(dfs)
             df = df.reset_index().melt(id_vars = ["lat", "lon", "gpi"], var_name = "label", value_name="value").sort_values("label")
-            df["dataset"] = f"{Var.ref_ds[0]} & {Var.metric_ds[0]}"
+            # df["dataset"] = f"{Var.ref_ds[0]} & {Var.metric_ds[0]}" 
+            df["dataset"] = [df["label"][i].split("\n")[1].replace("Datasets: ", "") for i in df.index] 
+            # Because the plots have to be generated in comparions with each pair of other data in tc so ifthere are 5 datasets i calculate the tc for 1 with 0-2, 0-3, 0-4
             # values are all Nan or NaNf - not plotted
             if np.isnan(df["value"].to_numpy()).all():
                 continue
             # necessary if statement to prevent key error when no CIs are in the netCDF
             if ci:
-                ci_id = {f"{Var.ref_ds[0]} & {Var.metric_ds[0]}":ci[id]}
+                ci_id = ci[id]
             else:
                 ci_id = None
             # create plot
@@ -1147,7 +1079,6 @@ class QA4SMPlotter:
                 fig=fig,
                 logo_path=globals.logo_pth,
                 position=globals.logo_position,
-                offset=globals.logo_offset_box_plots,
                 size=globals.logo_size
             )
 
@@ -1398,10 +1329,8 @@ class QA4SMPlotter:
             "n_bins": len(set(self.img.metadata[metadata_discrete].values.dropna()[self.img.metadata[metadata_discrete].values.dropna().keys()[0]]))}
 
         plotting_kwargs.update(kwargs)
-        n_datasets = len(self.img.datasets.others)
         fig, axes = plm.aggregate_subplots(to_plot=values_subset,
                                            funct=self.meta_single,
-                                           n_bars=n_datasets,
                                            **plotting_kwargs)
         
         # Append Legend Title

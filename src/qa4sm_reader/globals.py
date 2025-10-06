@@ -32,7 +32,7 @@ ci_alpha = 0.4
 palette = sns.color_palette("Set2") #seaborn color palette used for dataset combination --> colors.py, colorblindfriendly options "Set2", "Dark2", "colorblind", ("Paired" not really useable in this case)
 exclude_from_palette = [6] # index of colors which you want removed from the set (depends on n_colors), for example 6 for "Set2" due to it just being not so nice to look at
 color_palette_combinations = [c for i, c in enumerate(palette) if i not in exclude_from_palette]
-palette_2 = sns.color_palette("Dark2") #if more combinations than len(color_palette_combinations)
+color_palette_combinations_2 = sns.color_palette("Dark2") #if more combinations than len(color_palette_combinations)
 
 # === font defaults ===
 fontsize_title = 18
@@ -42,6 +42,7 @@ fontsize_legend = 12
 
 # === Aggregate subplots defaults ===
 n_col_agg = 2
+max_subplots = 20
 
 # === axis defaults ===
 ax_left = 0.2
@@ -411,6 +412,51 @@ _metric_description = {  # from /qa4sm/validator/validation/graphics.py
     'slopeURMSD': ' in {} per decade',
     'slopeBIAS': ' in {} per decade',
 }
+
+# units for all datasets
+def get_metric_units(dataset, raise_error=False):
+    # function to get m.u. with possibility to raise error
+    _metric_units = {  # from /qa4sm/validator/validation/graphics.py
+        'ISMN': 'm³/m³',
+        'C3S': 'm³/m³',  # old name
+        'C3S_combined': 'm³/m³',
+        'C3S_active': '% saturation',
+        'C3S_passive': 'm³/m³',
+        'C3S_rzsm': 'm³/m³',
+        'GLDAS': 'm³/m³',
+        'ASCAT': '% saturation',
+        'SMAP': 'm³/m³',   # old name
+        'SMAP_L3': 'm³/m³',
+        'ERA5': 'm³/m³',
+        'ERA5_LAND': 'm³/m³',
+        'ESA_CCI_SM_active': '% saturation',
+        'ESA_CCI_SM_combined': 'm³/m³',
+        'ESA_CCI_SM_passive': 'm³/m³',
+        'ESA_CCI_RZSM': 'm³/m³',
+        'SMOS': 'm³/m³',   # old name
+        'SMOS_IC': 'm³/m³',
+        'CGLS_CSAR_SSM1km': '% saturation',
+        'CGLS_SCATSAR_SWI1km': '% saturation',
+        'SMOS_L3': 'm³/m³',
+        'SMOS_L2': 'm³/m³',
+        'SMAP_L2': 'm³/m³',
+        'SMOS_SBPCA': 'm³/m³',
+    }
+
+    unit = _metric_units.get(dataset)
+
+    if unit is None:
+        if raise_error:
+            raise KeyError(f"The dataset '{dataset}' has not been specified in {__name__}.")
+        else:
+            warnings.warn(
+                f"The dataset '{dataset}' has not been specified in {__name__}. "
+                "Set 'raise_error' to True to raise an exception for this case.",
+                UserWarning
+            )
+            return "n.a."
+
+    return unit
 
 COMMON_METRICS = {
     'R': 'Pearson\'s r',

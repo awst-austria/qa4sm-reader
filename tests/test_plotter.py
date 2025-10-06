@@ -14,6 +14,7 @@ from qa4sm_reader.plotting_methods import geotraj_to_geo2d, _dict2df, bin_contin
     bin_discrete, combine_soils, combine_depths, output_dpi, average_non_additive
 from qa4sm_reader.handlers import Metadata
 from qa4sm_reader.globals import dpi_min, dpi_max, get_resolution_info
+import qa4sm_reader.globals as globals
 
 
 @pytest.fixture
@@ -390,7 +391,7 @@ def test_scaling_reference_unit(ref_scaling_ds_plotter, plotdir):
     img = ref_scaling_ds_plotter.img
     g = img._iter_vars(filter_parms={'metric': 'RMSD'})
     Var = next(g)
-    ref_meta, mds_meta, other_meta, scl_meta = Var.get_varmeta()
+    ref_meta, mds_meta, other_meta, scl_meta, sref_meta = Var.get_varmeta()
     mds_unit = mds_meta[1]['mu']
     ref_unit = ref_meta[1]['mu']
     scl_unit = scl_meta[1]['mu']

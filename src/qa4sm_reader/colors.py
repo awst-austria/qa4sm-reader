@@ -21,7 +21,7 @@ used_indices = set()
 
 # Large reusable palette defined in globals
 primary_palette = globals.color_palette_combinations
-secondary_palette = globals.palette_2
+secondary_palette = globals.color_palette_combinations_2
 palettes = [primary_palette, secondary_palette]
 len_primary = len(primary_palette)
 len_secondary = len(secondary_palette)
@@ -52,6 +52,9 @@ def _deterministic_index(combo, max_colors=len_primary):
     - Uses MD5 hash of the string representation of the combo.
     - Maps the hash to an integer index using modulo.
     """
+    if max_colors <= 0:
+        # No colors → fallback to 0 (caller must handle gracefully)
+        return 0
     h = hashlib.md5(str(combo).encode()).hexdigest()
     return int(h, 16) % max_colors
 
@@ -78,7 +81,9 @@ def get_color_for(combo):
        (linear probing). Wrap around if necessary.
     4. Assign the selected color to the combo and mark the index as used.
     """
-
+    if not any(len(pal) for pal in palettes):
+        raise RuntimeError("No colors available: all palettes are empty.")
+    
     if combo in color_map:
         return color_map[combo]
 
@@ -119,4 +124,8 @@ def get_palette_for(combo):
     dict
         Mapping {combo: RGB tuple}, suitable for passing to Seaborn `palette` argument
     """
+    if combo is None:
+        return {}
+    if len(combo) == 0:
+        return {}
     return {c: get_color_for(c) for c in combo}
