@@ -32,6 +32,7 @@ from matplotlib.legend_handler import HandlerLineCollection, HandlerTuple
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from matplotlib.patches import Patch, PathPatch, Rectangle
 from qa4sm_reader.colors import get_color_for, get_palette_for
+import qa4sm_reader.texthelpers as th
 
 from cartopy import config as cconfig
 import cartopy.feature as cfeature
@@ -853,7 +854,7 @@ def add_logo_to_figure(
         fig: matplotlib.figure.Figure,
         logo_path: Optional[str] = globals.logo_pth,
         position: Optional[str] = globals.logo_position,
-        offset: Optional[Union[Tuple, Offset]] = (0., -0.05),
+        offset: Optional[Union[Tuple, Offset]] = globals.logo_offset_bar_plots,
         y_pad: Optional[float] = 14,
         size: Optional[float] = globals.logo_size) -> None:
     """
@@ -1005,7 +1006,7 @@ def _make_cbar(fig,
     cax = fig.add_axes([bbox.x0, min([i.y0 for i in bboxes])-globals.cax_width-pad, bbox.width, globals.cax_width])
     
     cbar = fig.colorbar(im, cax=cax, orientation='horizontal', extend=extend)
-    wrapped_label = wrapped_text(fig, label, fig.get_figwidth()*(cax.get_position().x1-cax.get_position().x0) * fig.dpi, globals.fontsize_label) 
+    wrapped_label = th.wrapped_text(fig, label, fig.get_figwidth()*(cax.get_position().x1-cax.get_position().x0) * fig.dpi, globals.fontsize_label) 
     cbar.set_label(wrapped_label, fontsize=globals.fontsize_label)
     cbar.outline.set_linewidth(0.6)
     cbar.outline.set_edgecolor('black')
@@ -1383,12 +1384,12 @@ def boxplot(
                 globals.boxplot_width_vertical*values["dataset"].nunique()/globals.bin_th \
                     if values["dataset"].nunique()<globals.n_boxplots_in_row \
                         else globals.boxplot_width_vertical*globals.n_boxplots_in_row/globals.bin_th,
-                globals.boxplot_height_vertical*(n_axes**(1/1.4))
+                globals.boxplot_height_vertical*(n_axes**(globals.bp_height_exponent))
             ]
         else:
             dims = [
                 globals.boxplot_width_vertical,
-                globals.boxplot_height_vertical*(n_axes**(1/1.4))
+                globals.boxplot_height_vertical*(n_axes**(globals.bp_height_exponent))
             ]
 
         fig = plt.figure(figsize = (dims[0], dims[1]))
@@ -1477,7 +1478,8 @@ def boxplot(
                 l_up.append(ax.patches[-1])               
 
         if label is not None:
-            plt.ylabel(label, fontsize = globals.fontsize_label)
+            x, y = th.smart_suplabel(fig, axis="y")
+            fig.supylabel(label, fontsize = globals.fontsize_label, x=x, y=y)
             #insert xlabel here
 
         if ci and new_coloring:
@@ -1495,9 +1497,10 @@ def boxplot(
             ax.legend(handles=[up_handle, low_handle],
                     labels=["Upper CI", "Lower CI"],
                     fontsize=globals.fontsize_legend,
-                    loc=best_legend_pos_exclude_list(ax),
+                    loc=th.best_legend_pos_exclude_list(ax),
                     handler_map={tuple: HandlerHatch()})
         ax.set_xlabel(None)
+        ax.set_ylabel(None)
 
         if ci and not new_coloring:
             low_patch = Patch(facecolor=c_lower, edgecolor="black")
@@ -1506,7 +1509,7 @@ def boxplot(
             ax.legend(handles=[up_patch, low_patch],
                     labels=["Upper CI", "Lower CI"],
                     fontsize=globals.fontsize_legend,
-                    loc=best_legend_pos_exclude_list(ax))
+                    loc=th.best_legend_pos_exclude_list(ax))
 
         positions = np.arange(len(ax_combos))
         ticklabels = values["label"].unique()[ax_i*globals.n_boxplots_in_row:(ax_i+1)*globals.n_boxplots_in_row]
@@ -1530,7 +1533,7 @@ def boxplot(
             ax.set_xlim((ticks[0]+ticks[-1])/2-(globals.no_growth_th_v+1)/2, (ticks[0]+ticks[-1])/2 +(globals.no_growth_th_v+1)/2)
 
         if not ci:
-            ax.legend([],[], fontsize=globals.fontsize_legend, loc=best_legend_pos_exclude_list(ax))
+            ax.legend([],[], fontsize=globals.fontsize_legend, loc=th.best_legend_pos_exclude_list(ax))
 
     return fig, axes
 
@@ -1748,7 +1751,7 @@ def bin_classes(
         dictionary with metadata subsets as keys
     """
     classes_lut = globals.metadata[meta_key][1]
-    grouped = metadata_values.applymap(lambda x: classes_lut[x])
+    grouped = metadata_values.map(lambda x: classes_lut[x])
     binned = {}
     for meta_class, meta_df in grouped.groupby(meta_key).__iter__():
         bin_df = df.loc[meta_df.index]
@@ -2054,7 +2057,8 @@ def bplot_catplot(to_plot,
     labels = None
     return_figax = False
     orient = "v"
-    n_meta = to_plot[metadata_name].nunique()
+    n_meta = to_plot[metadata_name].nunique() # # of categories
+    n_comb = to_plot["Dataset"].nunique() # # of combinations
     if axis is None:
         return_figax = True
         if len(set(to_plot[metadata_name])) > globals.orient_th:
@@ -2183,7 +2187,7 @@ def bplot_catplot(to_plot,
     axis.spines['right'].set_visible(False)
     axis.spines['top'].set_visible(False)
 
-    axis.legend(loc=best_legend_pos_exclude_list(axis), fontsize=globals.fontsize_legend)
+    axis.legend(loc=th.best_legend_pos_exclude_list(axis), fontsize=globals.fontsize_legend)
 
     if return_figax:
         #fig.set_figwidth(dims[0])
@@ -2204,7 +2208,8 @@ def boxplot_metadata(
     nbins=4,
     axis=None,
     plot_type: str = "catplot",
-    meta_boxplot_min_samples=5,
+    meta_boxplot_min_samples=globals.metadata_min_samples,
+    meta_boxplot_max_boxes=globals.metadata_max_boxes,
     **bplot_kwargs,
 ) -> tuple:
     """
@@ -2231,9 +2236,12 @@ def boxplot_metadata(
     plot_type : str, default is 'catplot'
         one of 'catplot' or 'multiplot', defines the type of plots for the 'classes' and 'continuous'
         metadata types
-    meta_boxplot_min_samples: int, optional (default: 5)
+    meta_boxplot_min_samples: int, optional
         Minimum number of points in a bin to be plotted.
         If not enough points are available, the plot is not created.
+    meta_boxplot_max_boxes: int, optional
+        Maximum number of boxes which will be created.
+        If too many would be drawn, the plot is not created because representation would be overcrowded.
 
     Returns
     -------
@@ -2262,6 +2270,13 @@ def boxplot_metadata(
             "to a lower value to allow for smaller samples.")
 
     if isinstance(to_plot, dict):
+        if len(to_plot)*len(to_plot[list(to_plot.keys())[0]].columns) > meta_boxplot_max_boxes:
+            raise PlotterError(
+                f"There are too many boxes (categories * dataset_combinations: {len(to_plot)}*{len(to_plot[list(to_plot.keys())[0]].columns)} " \
+                f"= {len(to_plot)*len(to_plot[list(to_plot.keys())[0]].columns)}). A maximum of {meta_boxplot_max_boxes} boxes " \
+                "will be drawn as to not overcrowd the plots. \nChanging meta_boxplot_max_boxes will change " \
+                "the threshhold."
+            )
         if plot_type == "catplot":
             to_plot = _dict2df(to_plot, meta_key)
             generate_plot = bplot_catplot
@@ -2269,6 +2284,13 @@ def boxplot_metadata(
             generate_plot = bplot_multiple
 
     elif isinstance(to_plot, pd.DataFrame):
+        if to_plot[meta_key].nunique()*to_plot["Dataset"].nunique() > meta_boxplot_max_boxes:
+            raise PlotterError(
+                f"There are too many boxes (categories * dataset_combinations: {to_plot[meta_key].nunique()}*{to_plot["Dataset"].nunique()} " \
+                f"= {to_plot[meta_key].nunique()*to_plot["Dataset"].nunique()}). A maximum of {meta_boxplot_max_boxes} boxes " \
+                "will be drawn as to not overcrowd the plots. \nChanging meta_boxplot_max_boxes will change " \
+                "the threshhold."
+            )
         generate_plot = bplot_catplot
 
     out = generate_plot(
@@ -2593,7 +2615,7 @@ def plot_spatial_extent(
                 else:
                     continue
     # style plot
-    make_watermark(fig, globals.watermark_pos, offset=0)
+    add_logo_to_figure(fig)
     title_style = {"fontsize": globals.fontsize_title}
     ax.set_title("Spatial extent of the comparison", **title_style)
     # provide extent of plot

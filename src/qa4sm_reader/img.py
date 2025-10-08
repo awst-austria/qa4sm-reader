@@ -550,7 +550,7 @@ class QA4SMImg(object):
         stats_df.set_index('Metric', inplace=True)
         stats_df.sort_values(by='Group', inplace=True)
         # format the numbers for display
-        stats_df = stats_df.applymap(_format_floats)
+        stats_df = stats_df.map(_format_floats)
         stats_df.drop(labels='Group', axis='columns', inplace=True)
 
         return stats_df

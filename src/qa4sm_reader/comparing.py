@@ -3,6 +3,7 @@ from qa4sm_reader.handlers import QA4SMMetric
 import qa4sm_reader.globals as glob
 from qa4sm_reader.plotter import QA4SMPlotter
 import qa4sm_reader.plotting_methods as plm
+import qa4sm_reader.texthelpers as th
 
 from shapely.geometry import Polygon
 import matplotlib.pyplot as plt
@@ -612,6 +613,7 @@ class QA4SMComparison:
                                  position=glob.logo_position,
                                  size=glob.logo_size)
         plt.tight_layout()
+        return None
 
     def diff_mapplot(self, metric: str, **kwargs):
         """
@@ -625,25 +627,34 @@ class QA4SMComparison:
             plotting keyword arguments
         """
         self.perform_checks(overlapping=True, union=True, pairwise=True)
+        print("1")
         df = self._get_pairwise(metric=metric, add_stats=False).dropna()
+        print("2")
         Metric = QA4SMMetric(metric)
+        print("3")
         um = glob._metric_description[metric].format(
             glob.get_metric_units(self.ref['short_name']))
+        print("4")
         # make mapplot
         cbar_label = "Difference between {} and {}".format(
             *df.columns) + f"{um}"
-
+        print("5")
         fig, axes = plm.mapplot(df.iloc[:, 2],
                                 metric=metric,
                                 ref_short=self.ref['short_name'],
                                 diff_map=True,
                                 label=cbar_label)
-        fonts = {"fontsize": 12}
+        print("6")
         title_plot = f"Overview of the difference in {Metric.pretty_name} " \
-                     f"against the reference {self.ref['pretty_title']}"
-        axes.set_title(title_plot, pad=glob.title_pad, **fonts)
-
-        plm.make_watermark(fig, glob.watermark_pos, offset=0.01)
+                    f"against the reference {self.ref['pretty_title']}"
+        th.set_wrapped_title(fig, axes, title_plot)
+        plm.add_logo_in_bg_front(fig, 
+                                logo_path=glob.logo_pth,
+                                position=glob.logo_position,
+                                size=glob.logo_size)
+        print("7")
+        plt.close(fig)
+        return None
 
     def wrapper(self, method: str, metric=None, **kwargs):
         """
@@ -673,5 +684,4 @@ class QA4SMComparison:
             raise ComparisonError(
                 "If you chose '{}' as a method, you should specify"
                 " a metric (e.g. 'R').".format(method))
-
         return diff_method(metric=metric, **kwargs)

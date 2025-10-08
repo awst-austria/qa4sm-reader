@@ -79,6 +79,9 @@ map_land_color = "#E7E2D6"
 map_water_color = "#e0f7fa"
 
 # === boxplot_basic defaults ===
+metadata_max_boxes = 90
+metadata_min_samples = 5
+
 boxplot_height = 7 #$ increased by 1 to house logo
 boxplot_width = 2.1  # times (n+1), where n is the number of boxes.
 
@@ -98,6 +101,8 @@ boxplot_height_vertical = 7.5
 boxplot_width_vertical = 5
 
 period_bin_th = 6 # Above the threshold the figure height gets changes dynamically relative to # of bins
+
+bp_height_exponent = 3/4 # exponent determining how the (non-metadata-)boxplot grows with increasing axes rows
 
 boxplot_edgecolor = "#000000" # color of the edgeline of the boxplot
 boxplot_edgewidth = 1 # width of edgeline of boxplot
