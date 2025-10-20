@@ -26,7 +26,7 @@ dependencies = [
     "pandas",
     "numpy",
     "netcdf4<1.7.3",
-    "h5netcdf<1.7.0",
+    "h5netcdf",
     "matplotlib",
     "pyQt5",
     "seaborn",
