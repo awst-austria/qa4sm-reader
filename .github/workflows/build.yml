@@ -22,7 +22,7 @@ jobs:
         python-version: ['3.12']  #  Make sure to use the QA4SM python version
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.1.7
         with:
           submodules: true
       - name: install libtiff dependency (Ubuntu only)
