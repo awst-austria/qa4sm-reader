@@ -25,7 +25,7 @@ dependencies = [
     "xarray>=2024.0.0",
     "pandas",
     "numpy",
-    "netcdf4",
+    "netcdf4<1.7.3",
     "h5netcdf",
     "matplotlib",
     "pyQt5",
