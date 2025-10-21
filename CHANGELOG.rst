@@ -4,7 +4,7 @@ Changelog
 
 Unreleased changes in master branch
 ===================================
--
+- Pin netcdf4 to <1.7.3
 
 Version 0.11.6
 ==============
