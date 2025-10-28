@@ -23,6 +23,8 @@ import matplotlib.axes
 import matplotlib.cbook as cbook
 import matplotlib.image as mpimg
 from matplotlib.lines import Line2D
+matplotlib.use("Qt5Agg")
+matplotlib.rcParams["font.family"] = "DejaVu Sans"
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcol
 import matplotlib.ticker as mticker
@@ -90,6 +92,7 @@ def wrapped_text(fig, text, width, fontsize) -> str:
         The text wrapped into multiple lines, separated by '\n'.
     """
     # Validate fontsize
+    fontsize=float(fontsize)
     if not np.isfinite(fontsize) or fontsize <= 0:
         warnings.warn(f"Invalid fontsize {fontsize}, using fallback value of 10")
         fontsize = 10
@@ -102,7 +105,12 @@ def wrapped_text(fig, text, width, fontsize) -> str:
     sample = "This is a very long text that should automatically wrap into multiple lines depending on the figure width"
     
     try:
-        example_text = fig.suptitle(sample, fontsize=fontsize)
+        if not fig.axes:
+            ax = fig.add_subplot(111)
+            ax.set_axis_off()
+        else:
+            ax = fig.axes[0]
+        example_text = ax.text(0.5,0.5,sample, fontsize=fontsize)
         renderer = fig.canvas.get_renderer()
         
         try:
@@ -992,7 +1000,8 @@ def _make_cbar(fig,
                metric: str,
                label=None,
                diff_map=False,
-               scl_short=None):
+               scl_short=None,
+               wrap_text=True):
     """
     Make colorbar to use in plots
 
@@ -1163,7 +1172,10 @@ def _make_cbar(fig,
         if not np.isfinite(label_width) or label_width <= 0:
             wrapped_label = label
         else:
-            wrapped_label = wrapped_text(fig, label, label_width, fontsize)
+            if wrap_text:
+                wrapped_label = wrapped_text(fig, label, label_width, fontsize)
+            else:
+                wrapped_label=label
         
         cbar.set_label(wrapped_label, fontsize=fontsize)
     except Exception as e:

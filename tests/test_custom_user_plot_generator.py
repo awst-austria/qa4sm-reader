@@ -33,7 +33,7 @@ def test_display_variables(sample_plot_object):
 
 
 def test_plot_map(sample_plot_object):
-    """Test plot object creation."""
+    '''Test plot object creation.'''
     metric = 'R'
     temp_dir = tempfile.mkdtemp()
     dataset_names = ['ERA5_LAND', 'C3S']

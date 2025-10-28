@@ -512,7 +512,8 @@ def custom_mapplot(
                        metric,
                        label=label,
                        diff_map=diff_map,
-                       scl_short=scl_short)
+                       scl_short=scl_short,
+                       wrap_text=False)
         except:
             _, _, cax = _make_cbar(fig,
                        ax,
@@ -521,7 +522,8 @@ def custom_mapplot(
                        metric.split('_')[0],
                        label=label,
                        diff_map=diff_map,
-                       scl_short=scl_short)
+                       scl_short=scl_short,
+                       wrap_text=False)
         if colorbar_ticks_fontsize and cax:
             cax.tick_params(labelsize=colorbar_ticks_fontsize)
     style_map(ax, plot_extent, grid_tick_size=xyticks_fontsize, **style_kwargs)
