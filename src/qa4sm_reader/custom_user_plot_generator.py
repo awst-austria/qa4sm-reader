@@ -437,7 +437,7 @@ def custom_mapplot(
                 cmap.set_over("red")
 
     # initialize plot
-    fig, ax = init_plot(figsize, add_cbar, projection)
+    fig, ax = init_plot(figsize, projection=projection)
     ax.coastlines()
     ax.add_feature(cfeature.BORDERS, linestyle=":")
     ax.add_feature(cfeature.LAND, facecolor="lightgray", edgecolor="black")
@@ -513,7 +513,7 @@ def custom_mapplot(
                        label=label,
                        diff_map=diff_map,
                        scl_short=scl_short,
-                       wrap_text=False)
+                       wrap_text=True)
         except:
             _, _, cax = _make_cbar(fig,
                        ax,
@@ -523,7 +523,7 @@ def custom_mapplot(
                        label=label,
                        diff_map=diff_map,
                        scl_short=scl_short,
-                       wrap_text=False)
+                       wrap_text=True)
         if colorbar_ticks_fontsize and cax:
             cax.tick_params(labelsize=colorbar_ticks_fontsize)
     style_map(ax, plot_extent, grid_tick_size=xyticks_fontsize, **style_kwargs)
@@ -533,5 +533,5 @@ def custom_mapplot(
         ax.set_title(title)
 
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/{column_name}_map.png", dpi=300)
+    plt.savefig(f"{output_dir}/{column_name}_map.png", dpi=100)
     return fig, ax

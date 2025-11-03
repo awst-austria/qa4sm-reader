@@ -551,7 +551,7 @@ def get_plot_extent(df, grid_stepsize=None, grid=False) -> tuple:
     return extent
 
 def init_plot(figsize,
-              dpi,
+              dpi=globals.dpi_min,
               projection=None,
               fig_template=None) -> tuple:
     """Initialize mapplot"""
