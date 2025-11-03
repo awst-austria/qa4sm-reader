@@ -23,7 +23,6 @@ import matplotlib.axes
 import matplotlib.cbook as cbook
 import matplotlib.image as mpimg
 from matplotlib.lines import Line2D
-matplotlib.use("Qt5Agg")
 matplotlib.rcParams["font.family"] = "DejaVu Sans"
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcol
