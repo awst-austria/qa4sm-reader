@@ -11,10 +11,10 @@ Version 0.12.1
 
 Version 0.12
 ============
-- Standardized plots – Unified sizing, fonts, labels, and colorblind-safe palettes
-- Streamlined titles – Removed repetitive text, moved details to body content
-- Fixed dataset combinations – All dataset pairs now display correctly
-- Refined UI elements – Updated logos, text wrapping, and legend designs
+- Standardized plots with unified sizing, fonts, labels, and colorblind-safe palettes
+- Streamlined titles by removing repetitive text and relocating supplementary details
+- Fixed dataset combinations to correctly display all possible pairs
+- Refined UI elements including logos, text wrapping, and legend designs
 - Pin netcdf4 to <1.7.3
 
 Version 0.11.6
