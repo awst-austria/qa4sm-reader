@@ -587,7 +587,10 @@ class QA4SMComparison:
             metric name which the plot is based on
         """
         self.perform_checks(pairwise=True)
-        df, ci = self._get_pairwise(metric=metric, return_cis=True)
+        #df, ci = self._get_pairwise(metric=metric, return_cis=True)
+        #CI was turned off when multi-combo was introduced
+        df = self._get_pairwise(metric=metric, return_cis=False)
+        ci = None
         # prepare axis name
         Metric = QA4SMMetric(metric)
         ref_ds = self.ref['short_name']

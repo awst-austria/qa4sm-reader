@@ -5,6 +5,10 @@ Changelog
 Unreleased changes in master branch
 ===================================
 
+Version 0.12.1
+==============
+- Bugfix comparison module boxplot creation
+
 Version 0.12
 ============
 - Standardized plots – Unified sizing, fonts, labels, and colorblind-safe palettes
