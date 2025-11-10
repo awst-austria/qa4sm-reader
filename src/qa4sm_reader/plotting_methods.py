@@ -56,21 +56,6 @@ plt.rcParams['hatch.linewidth'] = globals.hatch_linewidth
 # Change of standard seaborn boxplot parameters through monkeypatching
 _old_boxplot = sns.boxplot
 
-"""def custom_boxplot(*args, **kwargs):
-    defaults = dict(
-        boxprops=dict(edgecolor=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth),
-        whiskerprops=dict(color=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth),
-        capprops=dict(color=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth),
-        medianprops=dict(color=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth),
-    )
-    for k, v in defaults.items():
-        if k in kwargs:
-            defaults[k].update(kwargs.pop(k))
-    if 'boxprops' not in kwargs and 'boxprops' not in defaults:
-        # Provide a minimal valid dict for Seaborn
-        defaults['boxprops'] = dict(edgecolor=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth)
-    return _old_boxplot(*args, **kwargs, **defaults)"""
-
 def sns_custom_boxplot(*args, **kwargs):
     """
     sns.boxplot wrapper that applies uniform styling.
