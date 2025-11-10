@@ -11,7 +11,7 @@ qa4sm_reader
   :target: https://coveralls.io/r/awst-austria/qa4sm-reader?branch=master
 
 .. |pip| image:: https://badge.fury.io/py/qa4sm-reader.svg
-    :target: https://badge.fury.io/py/qa4sm-reader.
+    :target: https://badge.fury.io/py/qa4sm-reader
 
 
 qa4sm_reader is a python package to read and plot the result files of the `qa4sm service`_.

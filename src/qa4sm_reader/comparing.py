@@ -143,7 +143,7 @@ class QA4SMComparison:
             for metric in img.metrics:
                 # hardcoded because n_obs cannot be compared. todo: exclude empty metrics (problem: the values are not loaded here)
                 if metric in glob.metric_groups['common'] or metric in [
-                        "tau", "p_tau"
+                        "tau", "p_tau", "status"
                 ]:
                     continue
                 img_metrics[metric] = glob._metric_name[metric]
@@ -334,12 +334,14 @@ class QA4SMComparison:
         ref_grid_stepsize = self.compared[0].ref_dataset_grid_stepsize
 
         ref = self._check_ref()["short_name"]
+        is_scattered = any([x.ds.attrs.get('val_is_scattered_data') == 'True' for x in self.compared])
         plm.plot_spatial_extent(polys=polys,
                                 ref_points=ref_points,
                                 overlapping=self.overlapping,
                                 intersection_extent=extent,
                                 reg_grid=(ref != "ISMN"),
-                                grid_stepsize=ref_grid_stepsize)
+                                grid_stepsize=ref_grid_stepsize,
+                                is_scattered=is_scattered)
 
     def _get_data(
         self, metric: str
@@ -596,6 +598,8 @@ class QA4SMComparison:
         figsize = [figwidth, glob.boxplot_height]
         df = df.reset_index().melt(id_vars = ["lat", "lon", "gpi"], var_name = "label", value_name="value").sort_values("label")
         df["validation"] = [df["label"][i].split("Val")[1][:1] if len(df["label"][i].split("Val")) == 2 else f"{df["label"][i].split("Val")[1][:1]} - {df["label"][i].split("Val")[2][:1]}" for i in df.index]
+        df = df.reset_index().melt(id_vars = ["lat", "lon", "gpi"], var_name = "label", value_name="value").sort_values("label")
+        df["validation"] = [df["label"][i].split("Val")[1][:1] if len(df["label"][i].split("Val")) == 2 else f"{df["label"][i].split("Val")[1][:1]} - {df["label"][i].split("Val")[2][:1]}" for i in df.index]
         fig, axes = plm.boxplot(
             df,
             ci=ci,
@@ -627,24 +631,22 @@ class QA4SMComparison:
             plotting keyword arguments
         """
         self.perform_checks(overlapping=True, union=True, pairwise=True)
-        print("1")
         df = self._get_pairwise(metric=metric, add_stats=False).dropna()
-        print("2")
         Metric = QA4SMMetric(metric)
-        print("3")
         um = glob._metric_description[metric].format(
             glob.get_metric_units(self.ref['short_name']))
-        print("4")
         # make mapplot
         cbar_label = "Difference between {} and {}".format(
             *df.columns) + f"{um}"
-        print("5")
+
+        # point data case
+        is_scattered = any([x.ds.attrs.get('val_is_scattered_data') == 'True' for x in self.compared])
         fig, axes = plm.mapplot(df.iloc[:, 2],
                                 metric=metric,
                                 ref_short=self.ref['short_name'],
                                 diff_map=True,
-                                label=cbar_label)
-        print("6")
+                                label=cbar_label,
+                                is_scattered=is_scattered)
         title_plot = f"Overview of the difference in {Metric.pretty_name} " \
                     f"against the reference {self.ref['pretty_title']}"
         th.set_wrapped_title(fig, axes, title_plot)
@@ -652,9 +654,8 @@ class QA4SMComparison:
                                 logo_path=glob.logo_pth,
                                 position=glob.logo_position,
                                 size=glob.logo_size)
-        print("7")
         plt.close(fig)
-        return None
+        return fig
 
     def wrapper(self, method: str, metric=None, **kwargs):
         """

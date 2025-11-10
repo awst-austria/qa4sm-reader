@@ -90,15 +90,13 @@ jobs:
     name: Submit Coveralls 👚
     needs: build
     runs-on: ubuntu-latest
-    container: python:3-slim
     steps:
       - name: Finalize Coveralls Parallel Build
-        run: |
-          pip3 install --upgrade coveralls
-          coveralls --finish
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          COVERALLS_SERVICE_NAME: github-actions
+        uses: coverallsapp/github-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          parallel-finished: true
+        continue-on-error: true
 
   publish-pypi-package:
     name: Publish PyPI 🚀

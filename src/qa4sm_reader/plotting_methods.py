@@ -10,6 +10,7 @@ from qa4sm_reader.utils import note
 
 import numpy as np
 import pandas as pd
+from math import gcd
 from scipy.ndimage import rotate
 from scipy.spatial.distance import pdist, squareform
 import os.path
@@ -23,6 +24,7 @@ import matplotlib.axes
 import matplotlib.cbook as cbook
 import matplotlib.image as mpimg
 from matplotlib.lines import Line2D
+matplotlib.rcParams["font.family"] = "DejaVu Sans"
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcol
 import matplotlib.ticker as mticker
@@ -54,7 +56,7 @@ plt.rcParams['hatch.linewidth'] = globals.hatch_linewidth
 # Change of standard seaborn boxplot parameters through monkeypatching
 _old_boxplot = sns.boxplot
 
-def custom_boxplot(*args, **kwargs):
+"""def custom_boxplot(*args, **kwargs):
     defaults = dict(
         boxprops=dict(edgecolor=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth),
         whiskerprops=dict(color=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth),
@@ -64,103 +66,34 @@ def custom_boxplot(*args, **kwargs):
     for k, v in defaults.items():
         if k in kwargs:
             defaults[k].update(kwargs.pop(k))
-    return _old_boxplot(*args, **kwargs, **defaults)
+    if 'boxprops' not in kwargs and 'boxprops' not in defaults:
+        # Provide a minimal valid dict for Seaborn
+        defaults['boxprops'] = dict(edgecolor=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth)
+    return _old_boxplot(*args, **kwargs, **defaults)"""
 
-sns.boxplot = custom_boxplot
+def sns_custom_boxplot(*args, **kwargs):
+    """
+    sns.boxplot wrapper that applies uniform styling.
+    """
+    try:
+        ax = sns.boxplot(*args, **kwargs)
+    except UnboundLocalError as e:
+        kwargs_no_legend = kwargs.copy()
+        kwargs_no_legend['legend'] = False
+        ax = sns.boxplot(*args, **kwargs_no_legend)
+    ax = sns.boxplot(*args, **kwargs)
+
+    # Manually apply QA4SM styling to boxes
+    for patch in getattr(ax, "patches", []):  # box artists
+        patch.set_edgecolor(globals.boxplot_edgecolor)
+        patch.set_linewidth(globals.boxplot_edgewidth)
+    for line in getattr(ax, "lines", []):  # whiskers, caps, medians
+        line.set_color(globals.boxplot_edgecolor)
+        line.set_linewidth(globals.boxplot_edgewidth)
+
+    return ax
 
 cconfig['data_dir'] = os.path.join(os.path.dirname(__file__), 'cartopy')
-
-def wrapped_text(fig, text, width, fontsize) -> str:
-    """
-    Wrap a long string of text to fit into a given figure width.
-
-    Parameters
-    ----------
-    fig : matplotlib.figure.Figure
-        The figure object in which the text will be drawn.
-    text : str
-        The text to wrap.
-    width : float
-        The available width in pixels for the text.
-    fontsize : int
-        The font size in points used for estimating text width.
-
-    Returns
-    -------
-    wrapped : str
-        The text wrapped into multiple lines, separated by '\n'.
-    """
-    sample = "This is a very long text that should automatically wrap into multiple lines depending on the figure width"
-    example_text = fig.suptitle(sample, fontsize=fontsize)
-
-    renderer = fig.canvas.get_renderer()
-    char_width_px = example_text.get_window_extent(renderer=renderer).width / len(sample)
-    example_text.set_text("")
-
-    # wrap text
-    max_chars = int(width / char_width_px * 1)  # 1 ... factor, 0.8 would mean 80% of axwidth is maxlength of title
-    wrapped = "\n".join(textwrap.wrap(text, max_chars))
-
-    return wrapped
-
-def best_legend_pos_exclude_list(ax, forbidden_locs= globals.leg_loc_forbidden):
-    """
-    Find the best legend position, excluding a list of positions.
-    
-    Parameters:
-        ax : matplotlib.axes.Axes
-        forbidden_locs : list of str or numbers, e.g. ["lower right", 2]
-    
-    Returns:
-        best_loc_str : string of the best location
-    """
-    # standard Matplotlib positions
-    locs = globals.leg_loc_dict
-    
-    # resolve forbidden positions to numbers
-    forbidden_nums = set()
-    for loc in forbidden_locs:
-        if isinstance(loc, str):
-            num = locs.get(loc)
-            if num is not None:
-                forbidden_nums.add(num)
-        else:
-            forbidden_nums.add(loc)
-    
-    # candidate positions
-    candidate_locs = [loc for loc in locs.values() if loc not in forbidden_nums]
-    
-    fig = ax.figure
-    
-    min_overlap = float("inf")
-    best_loc = candidate_locs[0]
-    
-    # evaluate overlap for each candidate
-    leg = ax.get_legend()
-    if not leg:
-        leg = ax.legend()
-    for loc in candidate_locs:
-        leg.set_loc(loc=loc)
-        fig.canvas.draw()
-        
-        bbox_legend = leg.get_window_extent()
-        xdata = [line.get_xdata() for line in ax.get_lines()]
-        ydata = [line.get_ydata() for line in ax.get_lines()]
-        
-        overlap = 0
-        for xd, yd in zip(xdata, ydata):
-            for x, y in zip(xd, yd):
-                xpix, ypix = ax.transData.transform((x, y))
-                if bbox_legend.contains(xpix, ypix):
-                    overlap += 1
-        
-        if overlap < min_overlap:
-            min_overlap = overlap
-            best_loc = loc
-    
-    # convert numeric back to string
-    best_loc_str = {v:k for k,v in locs.items()}[best_loc]
-    return best_loc_str
 
 def pixel_distance_nearest(ax, sc, min_px=10) -> float:
     """
@@ -218,11 +151,13 @@ def non_overlapping_markersize(ax, scatter):
             (radius_points**2))
     return size
 
-def _float_gcd(a, b, atol=1e-08):
+def _float_gcd(a, b, atol=1e-06):
     "Greatest common divisor (=groesster gemeinsamer teiler)"
-    while abs(b) > atol:
-        a, b = b, a % b
-    return a
+    scale = 1/atol # Scale to avoid floating point errors more robustly
+    ai = int(round(a*scale))
+    bi = int(round(b*scale))
+    gi = gcd(ai, bi)
+    return gi/scale
 
 def _get_grid(a):
     "Find the stepsize of the grid behind a and return the parameters for that grid axis."
@@ -511,7 +446,7 @@ def get_plot_extent(df, grid_stepsize=None, grid=False) -> tuple:
     return extent
 
 def init_plot(figsize,
-              dpi,
+              dpi=globals.dpi_min,
               projection=None,
               fig_template=None) -> tuple:
     """Initialize mapplot"""
@@ -571,6 +506,7 @@ def style_map(
     add_borders=True,
     add_us_states=False,
     grid_intervals=globals.grid_intervals,
+    grid_tick_size=None,
 ):
     """Parameters to style the mapplot"""
     ax.set_extent(plot_extent, crs=globals.data_crs)
@@ -958,7 +894,8 @@ def _make_cbar(fig,
                metric: str,
                label=None,
                diff_map=False,
-               scl_short=None):
+               scl_short=None,
+               wrap_text=True):
     """
     Make colorbar to use in plots
 
@@ -982,6 +919,11 @@ def _make_cbar(fig,
         Whether the colorbar is for a difference plot
 
     """
+
+    if im is None or not hasattr(im, "get_array") or im.get_array() is None:
+        warnings.warn("Skipping colorbar: invalid or empty image handle")
+        return fig, im, None
+    
     if label is None:
         label = globals._metric_name[metric]
 
@@ -989,30 +931,159 @@ def _make_cbar(fig,
     if diff_map:
         extend = "both"
 
-    fig.canvas.draw()
+    try:
+        fig.canvas.draw_idle()
+        fig.canvas.flush_events()
+        fig.canvas.draw()  # guarantees renderer exists
+    except Exception as e:
+        warnings.warn(f"Couldn't draw figure for initializing renderer: {e}")
+        pass
+    
     bbox = ax.get_position()
 
-    labels = ax.get_xticklabels()
-
-    # filter out empty labels
-    labels = [lbl for lbl in labels if lbl.get_text()]
+    labels = []
+    min_fontsize = 1.0  # minimum valid fontsize
+    default_fontsize = max(globals.fontsize_ticklabel, min_fontsize)
+    
+    for lbl in ax.get_xticklabels():
+        text = lbl.get_text()
+        if not text:
+            continue  # skip empty labels
+        
+        lbl.set_visible(True)  # ensure label is visible
+        
+        # Force valid font size BEFORE any rendering operation
+        try:
+            fs = lbl.get_fontsize()
+            if not np.isfinite(fs) or fs < min_fontsize:
+                lbl.set_fontsize(default_fontsize)
+        except Exception:
+            lbl.set_fontsize(default_fontsize)
+        
+        # Optionally skip labels off-axis
+        try:
+            x, y = lbl.get_position()
+            if not (ax.get_xlim()[0] <= x <= ax.get_xlim()[1]):
+                continue
+        except Exception:
+            pass  # include label if position check fails
+        
+        labels.append(lbl)
+    
     if not labels:
-        return None
-
-    bboxes = [lbl.get_window_extent(renderer=fig.canvas.get_renderer()).transformed(fig.transFigure.inverted())
-              for lbl in labels]
+        warnings.warn("No tick labels found for colorbar placement — using fallback positioning.")
+        # Use axis position as fallback
+        pad = 0.02  # 2% of figure height
+        cax = fig.add_axes([bbox.x0, bbox.y0 - globals.cax_width - pad, 
+                           bbox.width, globals.cax_width])
+        cbar = fig.colorbar(im, cax=cax, orientation='horizontal', extend=extend)
+        
+        # Set label with validation
+        try:
+            fontsize = globals.fontsize_label
+            cbar.set_label(label, fontsize=fontsize)
+        except Exception as e:
+            warnings.warn(f"Could not set colorbar label: {e}")
+        
+        cbar.outline.set_linewidth(0.6)
+        cbar.outline.set_edgecolor('black')
+        cbar.ax.tick_params(width=0.6, labelsize=default_fontsize)
+        return fig, im, cax
     
-    pad = bbox.y0-min([i.y1 for i in bboxes])#Same as pad between ax and ticklabels
-    cax = fig.add_axes([bbox.x0, min([i.y0 for i in bboxes])-globals.cax_width-pad, bbox.width, globals.cax_width])
+    # Try to get renderer, with fallback
+    try:
+        renderer = fig.canvas.get_renderer()
+    except Exception as e:
+        warnings.warn(f"Could not get renderer: {e}. Using fallback colorbar positioning.")
+        pad = 0.02
+        cax = fig.add_axes([bbox.x0, bbox.y0 - globals.cax_width - pad, 
+                           bbox.width, globals.cax_width])
+        cbar = fig.colorbar(im, cax=cax, orientation='horizontal', extend=extend)
+        
+        try:
+            fontsize = globals.fontsize_label
+            cbar.set_label(label, fontsize=fontsize)
+        except Exception:
+            pass
+        
+        cbar.outline.set_linewidth(0.6)
+        cbar.outline.set_edgecolor('black')
+        cbar.ax.tick_params(width=0.6, labelsize=default_fontsize)
+        return fig, im, cax
     
+    # Get bounding boxes with individual error handling
+    valid_bboxes = []
+    for lbl in labels:
+        try:
+            # Double-check fontsize right before rendering
+            fs = lbl.get_fontsize()
+            if not np.isfinite(fs) or fs < min_fontsize:
+                lbl.set_fontsize(default_fontsize)
+            
+            bbox_lbl = lbl.get_window_extent(renderer=renderer).transformed(fig.transFigure.inverted())
+            
+            # Validate bbox
+            if (np.isfinite(bbox_lbl.y0) and np.isfinite(bbox_lbl.y1) and 
+                np.isfinite(bbox_lbl.x0) and np.isfinite(bbox_lbl.x1)):
+                valid_bboxes.append(bbox_lbl)
+        except (RuntimeError, ValueError, AttributeError) as e:
+            # Skip this label silently - we already warned about invalid labels
+            continue
+    
+    if not valid_bboxes:
+        warnings.warn("No valid tick label extents — using fallback padding")
+        pad = 5 / fig.dpi if fig.dpi > 0 else 0.02  # 5 pixels or 2% fallback
+        valid_bboxes = [ax.get_position()]  # fallback
+    
+    # Calculate pad safely
+    try:
+        min_y1 = min([i.y1 for i in valid_bboxes])
+        min_y0 = min([i.y0 for i in valid_bboxes])
+        pad = bbox.y0 - min_y1
+        
+        # Validate pad
+        if not np.isfinite(pad) or pad < 0:
+            pad = 5 / fig.dpi if fig.dpi > 0 else 0.02
+    except Exception:
+        pad = 5 / fig.dpi if fig.dpi > 0 else 0.02
+        min_y0 = bbox.y0 - 0.05  # fallback
+    
+    # Create colorbar axes
+    cax = fig.add_axes([bbox.x0, min_y0 - globals.cax_width - pad, 
+                        bbox.width, globals.cax_width])
     cbar = fig.colorbar(im, cax=cax, orientation='horizontal', extend=extend)
-    wrapped_label = th.wrapped_text(fig, label, fig.get_figwidth()*(cax.get_position().x1-cax.get_position().x0) * fig.dpi, globals.fontsize_label) 
-    cbar.set_label(wrapped_label, fontsize=globals.fontsize_label)
+    
+    # Set label with full error handling
+    try:
+        fontsize = globals.fontsize_label
+        if not np.isfinite(fontsize) or fontsize <= 0:
+            fontsize = 10
+            warnings.warn(f"Invalid globals.fontsize_label, using {fontsize}")
+        
+        cax_pos = cax.get_position()
+        label_width = fig.get_figwidth() * (cax_pos.x1 - cax_pos.x0) * fig.dpi
+        
+        if not np.isfinite(label_width) or label_width <= 0:
+            wrapped_label = label
+        else:
+            if wrap_text:
+                wrapped_label = th.wrapped_text(fig, label, label_width, fontsize)
+            else:
+                wrapped_label=label
+        
+        cbar.set_label(wrapped_label, fontsize=fontsize)
+    except Exception as e:
+        warnings.warn(f"Failed to set colorbar label: {e}")
+        try:
+            cbar.set_label(label, fontsize=10)
+        except Exception:
+            pass  # Give up on label if even simple setting fails
+    
     cbar.outline.set_linewidth(0.6)
     cbar.outline.set_edgecolor('black')
-    cbar.ax.tick_params(width=0.6, labelsize=globals.fontsize_ticklabel)
-
-    return fig, im
+    cbar.ax.tick_params(width=0.6, labelsize=default_fontsize)
+    
+    return fig, im, cax
 
 
 def _CI_difference(fig, ax, ci):
@@ -1433,7 +1504,11 @@ def boxplot(
                 pos_upper = position + spacing
             color_cen = palette[ax_combos[i]] if new_coloring else "white"
             n_lines = len(ax.lines)
-            cen = sns.boxplot(data = data, 
+            if len(data["value"]) == int(data["value"].isna().sum()):
+                raise PlotterError(f"There are no valid measurements for this metric ({label}) "
+                                "therefore the creation of a plot is skipped.")
+            
+            cen = sns_custom_boxplot(data = data, 
                             x = "label",
                             y = "value",
                             positions = [position],
@@ -1450,7 +1525,7 @@ def boxplot(
                 c_lower = palette[ax_combos[i]] if new_coloring else"#87CFEBAA"
                 c_upper = palette[ax_combos[i]] if new_coloring else'#FF6347AA'
                 n_lines = len(ax.lines)
-                low = sns.boxplot(data = ci[d],
+                low = sns_custom_boxplot(data = ci[d],
                                 y = "lower",
                                 positions = [pos_lower],
                                 color = c_lower,
@@ -1464,7 +1539,7 @@ def boxplot(
                 l_low.append(ax.patches[-1]) # ax.patches[-1] gets last drawn patch
 
                 n_lines = len(ax.lines)
-                up = sns.boxplot(data = ci[d],
+                up = sns_custom_boxplot(data = ci[d],
                                 y = "upper",
                                 positions = [pos_upper],
                                 color = c_upper,
@@ -1944,6 +2019,15 @@ def aggregate_subplots(to_plot: dict, funct, **kwargs):
     fig, axes
     """
     sub_n = len(to_plot.keys())
+    if "n_bins" not in kwargs.keys():
+        kwargs["n_bins"] = 1
+    if kwargs["n_bins"]*len(to_plot[list(to_plot.keys())[0]].columns) > globals.aggregated_max_boxes:
+        raise PlotterError(
+            f"There are too many boxes (categories * dataset_combinations: {len(to_plot)}*{len(to_plot[list(to_plot.keys())[0]].columns)} " \
+            f"= {len(to_plot)*len(to_plot[list(to_plot.keys())[0]].columns)}). A maximum of {globals.aggregated_max_boxes} boxes " \
+            "will be drawn as to not overcrowd the plots. \nChanging globals.aggregated_max_boxes will change " \
+            "the threshhold."
+        )
     if sub_n > globals.max_subplots:
         warnings.warn(
             f"Number of subplots ({sub_n}) exceeds maximum allowed ({globals.max_subplots}). "
@@ -2034,7 +2118,6 @@ def add_cat_info(to_plot: pd.DataFrame, metadata_name: str) -> pd.DataFrame:
 
     return to_plot
 
-
 def bplot_catplot(to_plot,
                   axis_name,
                   metadata_name,
@@ -2099,8 +2182,11 @@ def bplot_catplot(to_plot,
 
     unique_combos = to_plot.set_index(np.arange(to_plot.index.size))["Dataset"].unique()
     palette = get_palette_for(unique_combos)
+    if len(to_plot["values"]) == int(to_plot["values"].isna().sum()):
+        raise PlotterError(f"There are no valid measurements for this metric ({axis_name}) metadata ({metadata_name}) combination "
+                         "therefore the creation of a plot is skipped.")
 
-    box = sns.boxplot(
+    box = sns_custom_boxplot(
         x=x,
         y=y,
         hue="Dataset",
@@ -2186,8 +2272,9 @@ def bplot_catplot(to_plot,
     axis.set_axisbelow(True)
     axis.spines['right'].set_visible(False)
     axis.spines['top'].set_visible(False)
-
-    axis.legend(loc=th.best_legend_pos_exclude_list(axis), fontsize=globals.fontsize_legend)
+    axis.legend(loc=th.best_legend_pos_exclude_list(axis), 
+                fontsize=globals.fontsize_legend, 
+                ncol=(len(axis.get_legend_handles_labels()[0])-1)//5 + 1)
 
     if return_figax:
         #fig.set_figwidth(dims[0])
@@ -2210,6 +2297,7 @@ def boxplot_metadata(
     plot_type: str = "catplot",
     meta_boxplot_min_samples=globals.metadata_min_samples,
     meta_boxplot_max_boxes=globals.metadata_max_boxes,
+    aggr_boxplot_max_boxes=globals.aggregated_max_boxes,
     **bplot_kwargs,
 ) -> tuple:
     """
@@ -2241,6 +2329,9 @@ def boxplot_metadata(
         If not enough points are available, the plot is not created.
     meta_boxplot_max_boxes: int, optional
         Maximum number of boxes which will be created.
+        If too many would be drawn, the plot is not created because representation would be overcrowded.
+    aggr_boxplot_max_boxes: int, optional
+        Maximum number of boxes which will be created for aggregated subplots.
         If too many would be drawn, the plot is not created because representation would be overcrowded.
 
     Returns
@@ -2281,6 +2372,13 @@ def boxplot_metadata(
             to_plot = _dict2df(to_plot, meta_key)
             generate_plot = bplot_catplot
         elif plot_type == "multiplot":
+            if len(to_plot)*len(to_plot[list(to_plot.keys())[0]].columns) > aggr_boxplot_max_boxes:
+                raise PlotterError(
+                    f"There are too many boxes (categories * dataset_combinations: {len(to_plot)}*{len(to_plot[list(to_plot.keys())[0]].columns)} " \
+                    f"= {len(to_plot)*len(to_plot[list(to_plot.keys())[0]].columns)}). A maximum of {aggr_boxplot_max_boxes} boxes " \
+                    "will be drawn as to not overcrowd the plots. \nChanging aggr_boxplot_max_boxes will change " \
+                    "the threshhold."
+                )
             generate_plot = bplot_multiple
 
     elif isinstance(to_plot, pd.DataFrame):
@@ -2321,6 +2419,7 @@ def mapplot(
     figsize: Optional[Tuple[float, float]] = globals.map_figsize,
     dpi: Optional[int] = globals.dpi_min,
     diff_map: Optional[bool] = False,
+    is_scattered: Optional[bool] = False,
     **style_kwargs: Dict
 ) -> Tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]:
     """
@@ -2403,7 +2502,7 @@ def mapplot(
     fig, ax = init_plot(figsize, dpi, projection)
 
     # scatter point or mapplot
-    if ref_short in globals.scattered_datasets:  # scatter
+    if ref_short in globals.scattered_datasets or is_scattered:  # scatter
         if not plot_extent:
             plot_extent = get_plot_extent(df)
         df = df.groupby(["lat", "lon"]).mean() # Because One Station can have multiple sensors the average value between these sensors is taken
@@ -2475,7 +2574,7 @@ def mapplot(
             im.set_sizes([s])   
 
     if add_cbar:  # colorbar
-        fig, im = _make_cbar(fig,
+        fig, im, cax = _make_cbar(fig,
                              ax,
                              im,
                              ref_short,
@@ -2497,6 +2596,7 @@ def plot_spatial_extent(
     intersection_extent: tuple = None,
     reg_grid=False,
     grid_stepsize=None,
+    is_scattered=False,
     **kwargs,
 ):
     """
@@ -2562,7 +2662,7 @@ def plot_spatial_extent(
             },
         ]
         # mapplot with imshow for gridded (non-ISMN) references
-        if reg_grid:
+        if reg_grid and not is_scattered:
             plot_df = []
             for n, (point_set, style, name) in enumerate(
                     zip((selected, outside), marker_styles,
@@ -2632,6 +2732,7 @@ def plot_spatial_extent(
                framealpha=0.95,
                facecolor="white",
                edgecolor="white")
+    plt.tight_layout()
 
 
 def _res2dpi_fraction(res, units):

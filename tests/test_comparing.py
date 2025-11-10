@@ -39,7 +39,7 @@ def double_img_paths():
 
 @pytest.fixture
 def double_img_overlap(double_img_paths):
-    """Initialized souble image comparison with intersection"""
+    """Initialized double image comparison with intersection"""
     return QA4SMComparison(double_img_paths)
 
 
@@ -95,19 +95,24 @@ def test_wrapper(single_img, double_img_overlap):
     This tests the wrapper function but more in general also the
     plotting functions/table
     """
-    methods = ['boxplot', 'mapplot']
-    for method in methods:
-        out = single_img.wrapper(method, "R")
-        plt.close("all")
-        assert not out  # generates a plot and returns nothing
+    # Define expected return types for each method
+    method_expectations = {
+        'boxplot': None,  # returns None
+        'mapplot': plt.Figure  # returns matplotlib Figure
+    }
 
-    for method in methods:
-        out = double_img_overlap.wrapper(method, "R")
-        plt.close("all")
-        if method == "table":
-            assert out is not None  # generates a pandas dataframe
-        else:
-            assert not out  # generates a plot and returns nothing
+    # Test both image objects
+    for img in [single_img, double_img_overlap]:
+        for method, expected_type in method_expectations.items():
+            out = img.wrapper(method, "R")
+            plt.close("all")
+
+            if expected_type is None:
+                assert not out
+            else:
+                assert isinstance(out, expected_type)
+
+
 
 
 def test_init_union(double_img_overlap):
