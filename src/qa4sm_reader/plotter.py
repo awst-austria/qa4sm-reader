@@ -1990,7 +1990,7 @@ class QA4SMCompPlotter:
         out_name: Optional[Union[List, List[str]]] = None
     ) -> matplotlib.figure.Figure:
         
-        Plot a Clustered Boxplot for a chosen metric
+        """Plot a Clustered Boxplot for a chosen metric
 
         Parameters
         ----------
@@ -2002,7 +2002,7 @@ class QA4SMCompPlotter:
         Returns
         -------
         fig : matplotlib.figure.Figure
-            the boxplot
+            the boxplot"""
 
         
         anchor_list = None
@@ -2030,7 +2030,7 @@ class QA4SMCompPlotter:
                                row_threshold_fraction: float = 0.8,
                                keep_empty_cols: bool = True) -> pd.DataFrame:
             
-            Sanitizes a DataFrame by dropping columns and rows based on non-NaN thresholds.
+            """Sanitizes a DataFrame by dropping columns and rows based on non-NaN thresholds.
 
             Parameters
             ----------
@@ -2053,7 +2053,7 @@ class QA4SMCompPlotter:
             -------
             df_sanitized : pd.DataFrame
                 Sanitized DataFrame
-            
+            """
 
             min_non_nan_columns = int(column_threshold * len(df))
 
