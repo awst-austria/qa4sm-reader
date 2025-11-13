@@ -14,6 +14,7 @@ from math import gcd
 from scipy.ndimage import rotate
 from scipy.spatial.distance import pdist, squareform
 import os.path
+import psutil
 
 from typing import Union, List, Tuple, Dict, Optional, Any
 import copy
@@ -48,13 +49,45 @@ import warnings
 import os
 from collections import namedtuple
 
-import textwrap
-
 # Change of standard matplotlib parameters
 matplotlib.rcParams['legend.framealpha'] = globals.legend_alpha
 plt.rcParams['hatch.linewidth'] = globals.hatch_linewidth
-# Change of standard seaborn boxplot parameters through monkeypatching
-_old_boxplot = sns.boxplot
+
+def max_square_array(dtype=np.float64, safety=0.6, print_stats=False):
+    """
+    Estimate the largest square NumPy array that can be safely allocated 
+    in memory on this machine.
+
+    Parameters
+    ----------
+    dtype : data-type, optional
+        The desired NumPy data type for the array (default: np.float64).
+        Common options: np.float32 (4 bytes), np.float64 (8 bytes).
+    safety : float, optional
+        Fraction of *available* RAM to consider safe for allocation. 
+        Defaults to 0.6 (60%) to prevent system instability.
+
+    Returns
+    -------
+    n : int
+        The maximum number of rows/columns for a square array of shape (n, n)
+        that fits within the given memory constraints.
+    """
+    mem = psutil.virtual_memory()
+    total_bytes = mem.available * safety  # only use x% of available memory
+    itemsize = np.dtype(dtype).itemsize
+    
+    n = int((total_bytes / itemsize) ** 0.5)
+
+    if print_stats:
+        size_gb = n**2 * itemsize / 1e9
+        print(f"Available RAM: {mem.available / 1e9:.2f} GB")
+        print(f"Usable ({safety*100:.0f}% safety): {total_bytes / 1e9:.2f} GB")
+        print(f"Data type: {dtype} ({itemsize} bytes per element)")
+        print(f"Max square shape: ({n:,}, {n:,})")
+        print(f"Array size: {size_gb:.2f} GB")
+
+    return n
 
 def sns_custom_boxplot(*args, **kwargs):
     """
@@ -136,7 +169,7 @@ def non_overlapping_markersize(ax, scatter):
             (radius_points**2))
     return size
 
-def _float_gcd(a, b, atol=1e-06):
+def _float_gcd(a, b, atol=1e-04):
     "Greatest common divisor (=groesster gemeinsamer teiler)"
     scale = 1/atol # Scale to avoid floating point errors more robustly
     ai = int(round(a*scale))
@@ -148,6 +181,9 @@ def _get_grid(a):
     "Find the stepsize of the grid behind a and return the parameters for that grid axis."
     a = np.unique(a)  # get unique values and sort
     das = np.unique(np.diff(a))  # get unique stepsizes and sort
+    if len(das) > 10: # If there are a lot of differing stepsizes no regular grid can be reconstructed
+        a_min, a_max, da, len_a = _get_grid_for_irregulars(a, das[0] if das[0]>0.01 else 0.01)
+        return a_min, a_max, da, len_a
     da = das[0]  # get smallest stepsize
     dal = []
     for d in das[1:]:  # make sure, all stepsizes are multiple of da
@@ -156,6 +192,10 @@ def _get_grid(a):
     a_min = a[0]
     a_max = a[-1]
     len_a = int((a_max - a_min) / da + 1)
+    # if there are more columns/rows than can be computed reduce increase cell size by factor 2
+    while len_a > max_square_array(): 
+        da = da*2
+        len_a = int((a_max - a_min) / da + 1)
     return a_min, a_max, da, len_a
 
 

@@ -598,8 +598,6 @@ class QA4SMComparison:
         figsize = [figwidth, glob.boxplot_height]
         df = df.reset_index().melt(id_vars = ["lat", "lon", "gpi"], var_name = "label", value_name="value").sort_values("label")
         df["validation"] = [df["label"][i].split("Val")[1][:1] if len(df["label"][i].split("Val")) == 2 else f"{df["label"][i].split("Val")[1][:1]} - {df["label"][i].split("Val")[2][:1]}" for i in df.index]
-        df = df.reset_index().melt(id_vars = ["lat", "lon", "gpi"], var_name = "label", value_name="value").sort_values("label")
-        df["validation"] = [df["label"][i].split("Val")[1][:1] if len(df["label"][i].split("Val")) == 2 else f"{df["label"][i].split("Val")[1][:1]} - {df["label"][i].split("Val")[2][:1]}" for i in df.index]
         fig, axes = plm.boxplot(
             df,
             ci=ci,
