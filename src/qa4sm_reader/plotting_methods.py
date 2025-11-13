@@ -192,7 +192,7 @@ def _get_grid(a):
     a_min = a[0]
     a_max = a[-1]
     len_a = int((a_max - a_min) / da + 1)
-    # if there are more columns/rows than can be computed reduce increase cell size by factor 2
+    # if there are more columns/rows than can be computed increase cell size by factor 2
     while len_a > max_square_array(): 
         da = da*2
         len_a = int((a_max - a_min) / da + 1)
@@ -206,6 +206,10 @@ def _get_grid_for_irregulars(a, grid_stepsize):
     a_max = a[-1]
     da = grid_stepsize
     len_a = int((a_max - a_min) / da + 1)
+     # if there are more columns/rows than can be computed increase cell size by factor 2
+    while len_a > max_square_array(): 
+        da = da*2
+        len_a = int((a_max - a_min) / da + 1)
     return a_min, a_max, da, len_a
 
 
