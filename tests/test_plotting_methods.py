@@ -5,6 +5,7 @@ import pytest
 import pandas as pd
 import seaborn as sns
 import qa4sm_reader.plotting_methods as plm
+import qa4sm_reader.texthelpers as th
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import qa4sm_reader.globals as globals
@@ -69,28 +70,28 @@ def sample_df_single_obs():
     return data
 
 def test_returns_valid_location(simple_ax):
-    loc = plm.best_legend_pos_exclude_list(simple_ax, forbidden_locs=[])
+    loc = th.best_legend_pos_exclude_list(simple_ax, forbidden_locs=[])
     assert isinstance(loc, str)
     assert loc in globals.leg_loc_dict.keys()
 
 
 def test_respects_forbidden(simple_ax):
     # Forbid 'upper right'
-    loc = plm.best_legend_pos_exclude_list(simple_ax, forbidden_locs=["upper right"])
+    loc = th.best_legend_pos_exclude_list(simple_ax, forbidden_locs=["upper right"])
     assert loc != "upper right"
 
 
 def test_numeric_forbidden(simple_ax):
     # Forbid numeric equivalent of 'upper left'
     upper_left_num = globals.leg_loc_dict["upper left"]
-    loc = plm.best_legend_pos_exclude_list(simple_ax, forbidden_locs=[upper_left_num])
+    loc = th.best_legend_pos_exclude_list(simple_ax, forbidden_locs=[upper_left_num])
     assert loc != "upper left"
 
 
 def test_with_existing_legend(simple_ax):
     # Pre-create a legend
     simple_ax.legend(loc="lower left")
-    loc = plm.best_legend_pos_exclude_list(simple_ax, forbidden_locs=[])
+    loc = th.best_legend_pos_exclude_list(simple_ax, forbidden_locs=[])
     assert isinstance(loc, str)
     assert loc in globals.leg_loc_dict.keys()
 
@@ -105,7 +106,7 @@ def test_overlap_minimization_prefers_less_overlap():
         ax.plot(x, y, label=f"line{i}")
 
     # With dense data in upper right, the algorithm should avoid "upper right"
-    loc = plm.best_legend_pos_exclude_list(ax, forbidden_locs=[])
+    loc = th.best_legend_pos_exclude_list(ax, forbidden_locs=[])
     assert loc != "upper right"
     assert isinstance(loc, str)
 
@@ -374,7 +375,7 @@ def test_bplot_creates_figure_and_axis(monkeypatch, sample_df):
     monkeypatch.setattr(plm, "add_cat_info", dummy_add_cat_info)
     monkeypatch.setattr(plm, "get_palette_for", dummy_get_palette_for)
     monkeypatch.setattr(plm, "capsizing", lambda ax, **kwargs: None)
-    monkeypatch.setattr(plm, "best_legend_pos_exclude_list", lambda ax: "best")
+    monkeypatch.setattr(th, "best_legend_pos_exclude_list", lambda ax: "best")
 
     fig, ax = plm.bplot_catplot(sample_df, axis_name="Values", metadata_name="meta")
     assert isinstance(fig, plt.Figure)
@@ -386,7 +387,7 @@ def test_bplot_single_observation_points(monkeypatch, sample_df_single_obs):
     monkeypatch.setattr(plm, "add_cat_info", dummy_add_cat_info)
     monkeypatch.setattr(plm, "get_palette_for", dummy_get_palette_for)
     monkeypatch.setattr(plm, "capsizing", lambda ax, **kwargs: None)
-    monkeypatch.setattr(plm, "best_legend_pos_exclude_list", lambda ax: "best")
+    monkeypatch.setattr(th, "best_legend_pos_exclude_list", lambda ax: "best")
 
     fig, ax = plm.bplot_catplot(sample_df_single_obs, axis_name="Values", metadata_name="meta")
     assert len(ax.patches) >= 0
@@ -397,7 +398,7 @@ def test_bplot_with_existing_axis(monkeypatch, sample_df):
     monkeypatch.setattr(plm, "add_cat_info", dummy_add_cat_info)
     monkeypatch.setattr(plm, "get_palette_for", dummy_get_palette_for)
     monkeypatch.setattr(plm, "capsizing", lambda ax, **kwargs: None)
-    monkeypatch.setattr(plm, "best_legend_pos_exclude_list", lambda ax: "best")
+    monkeypatch.setattr(th, "best_legend_pos_exclude_list", lambda ax: "best")
 
     fig, ax_orig = plt.subplots()
     result = plm.bplot_catplot(sample_df, axis_name="Values", metadata_name="meta", axis=ax_orig)
@@ -408,7 +409,7 @@ def test_bplot_tick_adjustments(monkeypatch, sample_df):
     monkeypatch.setattr(plm, "add_cat_info", dummy_add_cat_info)
     monkeypatch.setattr(plm, "get_palette_for", dummy_get_palette_for)
     monkeypatch.setattr(plm, "capsizing", lambda ax, **kwargs: None)
-    monkeypatch.setattr(plm, "best_legend_pos_exclude_list", lambda ax: "best")
+    monkeypatch.setattr(th, "best_legend_pos_exclude_list", lambda ax: "best")
 
     fig, ax = plm.bplot_catplot(sample_df, axis_name="Values", metadata_name="meta")
     grid_lines = [line.get_linestyle() for line in ax.get_xgridlines()] + [line.get_linestyle() for line in ax.get_ygridlines()]

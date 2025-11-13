@@ -79,6 +79,11 @@ map_land_color = "#E7E2D6"
 map_water_color = "#e0f7fa"
 
 # === boxplot_basic defaults ===
+metadata_max_boxes = 90
+aggregated_max_boxes = 30
+comparison_max_boxes = 90
+metadata_min_samples = 5
+
 boxplot_height = 7 #$ increased by 1 to house logo
 boxplot_width = 2.1  # times (n+1), where n is the number of boxes.
 
@@ -107,6 +112,8 @@ boxplot_new_coloring = True
 hatch_linewidth = 1.5
 num_hatches = 30
 boxplot_printnumbers = True  # Print 'median', 'nObs', 'stdDev' to the boxplot_basic.
+
+bp_height_exponent = 3/4 # exponent determining how the (non-metadata-)boxplot grows with increasing axes rows
 
 #TODO: remove eventually, as watermarlk string no longer needed
 # === watermark defaults ===
@@ -200,10 +207,9 @@ status_replace = {
 def get_status_colors():
     # function to get custom cmap for calculation errors
     # limited to 14 different error entries to produce distinct colors
-    cmap = cl.ListedColormap(matplotlib.colormaps['Set3'].colors[:len(status) - 2])
-    colors = [cmap(i) for i in range(cmap.N)]
-    colors.insert(0, (0, 0.66666667, 0.89019608, 1.0))
-    colors.insert(0, (0.45882353, 0.08235294, 0.11764706, 1.0))
+    colors = list(colorcet.m_CET_L18(np.linspace(0.25,1,len(status)-2)))
+    colors.insert(0, (188/256, 206/256, 217/256, 1.0)) # #bcced9
+    colors.insert(0, (40/256, 0, 0, 1.0))
     cmap = cl.ListedColormap(colors=colors)
     return cmap
 

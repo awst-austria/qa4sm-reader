@@ -24,6 +24,7 @@ from qa4sm_reader import plotting_methods as plm
 from qa4sm_reader.plotting_methods import ClusteredBoxPlot, patch_styling, scale_figure_for_network_metadata_plot
 from qa4sm_reader.exceptions import PlotterError
 import qa4sm_reader.handlers as hdl
+import qa4sm_reader.texthelpers as th
 from qa4sm_reader.utils import note, filter_out_self_combination_tcmetric_vars
 
 # Change of standard matplotlib parameters
@@ -32,22 +33,6 @@ matplotlib.rcParams['boxplot.boxprops.linewidth'] = globals.boxplot_edgewidth
 matplotlib.rcParams['boxplot.whiskerprops.linewidth'] = globals.boxplot_edgewidth
 matplotlib.rcParams['boxplot.capprops.linewidth'] = globals.boxplot_edgewidth
 matplotlib.rcParams['boxplot.medianprops.linewidth'] = globals.boxplot_edgewidth
-
-_old_boxplot = sns.boxplot
-
-def custom_boxplot(*args, **kwargs):
-    defaults = dict(
-        boxprops=dict(edgecolor=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth),
-        whiskerprops=dict(color=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth),
-        capprops=dict(color=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth),
-        medianprops=dict(color=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth),
-    )
-    for k, v in defaults.items():
-        if k in kwargs:
-            defaults[k].update(kwargs.pop(k))
-    return _old_boxplot(*args, **kwargs, **defaults)
-
-sns.boxplot = custom_boxplot
 
 class QA4SMPlotter:
     """
@@ -178,11 +163,11 @@ class QA4SMPlotter:
         ref, mds, other, _, sref = Var.get_varmeta()
 
         if type in ['boxplot_tc', 'mapplot_basic']:
-            d = QA4SMPlotter._get_dataset_dict(Var) # Appends version number to pretty name if needed
+            d = th.get_dataset_dict(Var) # Appends version number to pretty name if needed
             parts.extend([d[mds[0]]])
             parts.extend([d[ref[0]]])
         elif type == 'mapplot_tc':
-            d = QA4SMPlotter._get_dataset_dict(Var) # Appends version number to pretty name if needed
+            d = th.get_dataset_dict(Var) # Appends version number to pretty name if needed
             parts.extend([d[mds[0]]])
             for dss in Var.other_dss:
                 parts.extend([d[dss[0]]])
@@ -667,19 +652,13 @@ class QA4SMPlotter:
                 break
         if not type == "metadata":
             title = self.create_title(Var, type=type, period=period)
-            QA4SMPlotter._set_wrapped_title(fig, ax[0], title)
+            th.set_wrapped_title(fig, ax[0], title)
 
         # Legendentries for Datasets
-        fig, ax[0] = QA4SMPlotter._append_legend_title(fig, ax[0], Var)
+        fig, ax[0] = th.append_legend_title(fig, ax[0], Var)
 
         if globals.draw_logo:
-            plm.add_logo_to_figure(
-                fig=fig,
-                logo_path=globals.logo_pth,
-                position=globals.logo_position,
-                offset=globals.logo_offset_box_plots,
-                size=globals.logo_size
-            )
+            plm.add_logo_to_figure(fig=fig)
 
         return fig, ax
 
@@ -718,17 +697,11 @@ class QA4SMPlotter:
                 break
 
         title = self.create_title(Var, type=type, period=period)
-        QA4SMPlotter._set_wrapped_title(fig, ax, title)
+        th.set_wrapped_title(fig, ax, title)
 
         # add logo
         if globals.draw_logo:
-            plm.add_logo_to_figure(
-                fig=fig,
-                logo_path=globals.logo_pth,
-                position=globals.logo_position,
-                offset=globals.logo_offset_box_plots,
-                size=globals.logo_size
-            )
+            plm.add_logo_to_figure(fig=fig)
 
     def _save_plot(self,
                    out_name: str,
@@ -753,7 +726,8 @@ class QA4SMPlotter:
         for ext in out_types:
             fname = self._standard_filename(out_name, out_type=ext)
             if fname.exists():
-                warn(f'Overwriting file {fname.name}')
+                #necessary? is overwriting it anyway so i get notified that i deleted something
+                warn(f'Overwriting file {fname.name}') 
             try:
                 plt.savefig(fname, dpi='figure', bbox_inches='tight')
             except ValueError:
@@ -1074,15 +1048,10 @@ class QA4SMPlotter:
                                              period=period)
 
         # use title for plot, make logo
-        QA4SMPlotter._set_wrapped_title(fig, ax, title)
+        th.set_wrapped_title(fig, ax, title)
 
         if globals.draw_logo:
-            plm.add_logo_to_figure(
-                fig=fig,
-                logo_path=globals.logo_pth,
-                position=globals.logo_position,
-                size=globals.logo_size
-            )
+            plm.add_logo_to_figure(fig=fig)
 
         # save file or just return the image
         if save_files:
@@ -1261,7 +1230,7 @@ class QA4SMPlotter:
                                    **plotting_kwargs)
         
         if out:
-            out = QA4SMPlotter._append_legend_title(out[0], out[1], Var)
+            out = th.append_legend_title(out[0], out[1], Var)
 
         if axis is None:
             fig, ax = out
@@ -1341,8 +1310,9 @@ class QA4SMPlotter:
         else:
             ax_first = axes.flat[0]
 
-        ax_first.legend(fontsize=globals.fontsize_legend).set_loc("upper left")
-        _, ax_first = QA4SMPlotter._append_legend_title(fig, ax_first, Var)
+        ax_first.legend(fontsize=globals.fontsize_legend, 
+                        ncol=(len(ax_first.get_legend_handles_labels()[0])-1)//5 + 1).set_loc("upper left")
+        _, ax_first = th.append_legend_title(fig, ax_first, Var)
         
         return fig, axes
 
@@ -1410,12 +1380,12 @@ class QA4SMPlotter:
         # Appending labels for metadata Axis
         if isinstance(ax, plt.Axes):   # Only for single metadata plots, distracting in multiple subplots
             if ax.get_ylabel() in [""]+metadata_tuple:
-                ax_width_px = QA4SMPlotter._get_ax_width(fig)
-                ylabel = plm.wrapped_text(fig, "metadata: " + globals.metadata[metadata_discrete][0] if metadata_discrete else "metadata: " + ", ".join(meta_names), ax_width_px, globals.fontsize_label)
+                ax_width_px = th.get_ax_width(fig)
+                ylabel = th.wrapped_text(fig, "metadata: " + globals.metadata[metadata_discrete][0] if metadata_discrete else "metadata: " + ", ".join(meta_names), ax_width_px, globals.fontsize_label)
                 ax.set_ylabel(ylabel, fontsize = globals.fontsize_label)
             elif ax.get_xlabel() == [""]+metadata_tuple:
-                ax_height_px = QA4SMPlotter._get_ax_height(fig)
-                xlabel = plm.wrapped_text(fig, "metadata: " + globals.metadata[metadata_discrete][0] if metadata_discrete else "metadata: " + ", ".join(meta_names), ax_height_px, globals.fontsize_label)
+                ax_height_px = th.get_ax_height(fig)
+                xlabel = th.wrapped_text(fig, "metadata: " + globals.metadata[metadata_discrete][0] if metadata_discrete else "metadata: " + ", ".join(meta_names), ax_height_px, globals.fontsize_label)
                 ax.set_xlabel(xlabel, fontsize = globals.fontsize_label)
         
         elif isinstance(ax, np.ndarray):
@@ -1424,34 +1394,34 @@ class QA4SMPlotter:
 
             if len(ax)==1:
                 if fig.get_supylabel() in [""]+metadata_tuple:
-                    x, y = QA4SMPlotter._smart_suplabel(fig, "y")
-                    ax_width_px = QA4SMPlotter._get_ax_width(fig)
-                    ylabel = plm.wrapped_text(fig, "metadata: " + globals.metadata[metadata_discrete][0] if metadata_discrete else "metadata: " + ", ".join(meta_names), ax_width_px, globals.fontsize_label)
+                    x, y = th.smart_suplabel(fig, "y")
+                    ax_width_px = th.get_ax_width(fig)
+                    ylabel = th.wrapped_text(fig, "metadata: " + globals.metadata[metadata_discrete][0] if metadata_discrete else "metadata: " + ", ".join(meta_names), ax_width_px, globals.fontsize_label)
                     fig.supylabel(ylabel, 
                                 fontsize=globals.fontsize_label, 
                                 y=y,
                                 x=x)
                 if fig.get_supxlabel() in [""]+metadata_tuple:
-                    x, y = QA4SMPlotter._smart_suplabel(fig, "x")
-                    ax_height_px = QA4SMPlotter._get_ax_height(fig)
-                    xlabel = plm.wrapped_text(fig, globals._metric_name[metric], ax_height_px, globals.fontsize_label)
+                    x, y = th.smart_suplabel(fig, "x")
+                    ax_height_px = th.get_ax_height(fig)
+                    xlabel = th.wrapped_text(fig, globals._metric_name[metric], ax_height_px, globals.fontsize_label)
                     fig.supxlabel(xlabel, 
                                 fontsize=globals.fontsize_label, 
                                 y=y, 
                                 x=x)   
             else:
                 if fig.get_supylabel() in [""]+metadata_tuple:
-                    x, y = QA4SMPlotter._smart_suplabel(fig, "y")
-                    ax_width_px = QA4SMPlotter._get_ax_width(fig)
-                    ylabel = plm.wrapped_text(fig, globals._metric_name[metric], ax_width_px, globals.fontsize_label)
+                    x, y = th.smart_suplabel(fig, "y")
+                    ax_width_px = th.get_ax_width(fig)
+                    ylabel = th.wrapped_text(fig, globals._metric_name[metric], ax_width_px, globals.fontsize_label)
                     fig.supylabel(ylabel, 
                                 fontsize=globals.fontsize_label, 
                                 y=y,
                                 x=x)
                 if fig.get_supxlabel() in [""]+metadata_tuple:
-                    x, y = QA4SMPlotter._smart_suplabel(fig, "x")
-                    ax_height_px = QA4SMPlotter._get_ax_height(fig)
-                    xlabel = plm.wrapped_text(fig, "metadata: " + globals.metadata[metadata_discrete][0] if metadata_discrete else "metadata: " + ", ".join(meta_names), ax_height_px, globals.fontsize_label)
+                    x, y = th.smart_suplabel(fig, "x")
+                    ax_height_px = th.get_ax_height(fig)
+                    xlabel = th.wrapped_text(fig, "metadata: " + globals.metadata[metadata_discrete][0] if metadata_discrete else "metadata: " + ", ".join(meta_names), ax_height_px, globals.fontsize_label)
                     fig.supxlabel(xlabel, 
                                 fontsize=globals.fontsize_label, 
                                 y=y, 
@@ -1461,16 +1431,12 @@ class QA4SMPlotter:
             if period not in globals.no_print_period:
                 title = f'{period}: {title}'
 
-        QA4SMPlotter._set_wrapped_title(fig, None, title, use_suptitle=True)
+        th.set_wrapped_title(fig, None, title, use_suptitle=True)
         
         if globals.draw_logo:
             plm.add_logo_to_figure(
                 fig=fig,
-                logo_path=globals.logo_pth,
-                position=globals.logo_position,
-                offset=globals.logo_offset_metadata_plots,
-                size=globals.logo_size,
-            )
+                offset=globals.logo_offset_metadata_plots)
 
         if save_file:
             out_name = self._filenames_lut("metadata").format(
@@ -1540,9 +1506,21 @@ class QA4SMPlotter:
                     warnings.warn("Not all: " + ", ".join(meta_keys) +
                                   " are present in the netCDF variables")
             except PlotterError as e:
-                warnings.warn(
-                    f"Too few points are available to generate '{meta_type}` "
-                    f"metadata-based `{metric}` plots.")
+                msg = str(e)
+                if "too few points" in msg:
+                    warnings.warn(
+                        f"Too few points are available to generate '{meta_type}` "
+                        f"metadata-based `{metric}` plots.")
+                elif "too many boxes" in msg:
+                    warnings.warn(
+                        f"Too many boxes would be drawn in '{meta_type}` "
+                        f"metadata-based `{metric}` plots. Neglected due to overcrowding")
+                elif "no valid measurement" in msg:
+                    warnings.warn(f"There are no valid measurements for this metric ({metric}) metadata ({meta_type}) combination "
+                         "therefore the creation of a plot is skipped.")
+                else:
+                    warnings.warn(
+                        f"'{meta_type}` metadata-based `{metric}` plot wasn't created.")
 
         return filenames
 
@@ -2004,279 +1982,6 @@ class QA4SMCompPlotter:
                     continue
 
             yield Var
-
-    """def plot_cbp(
-        self,
-        chosen_metric: str,
-        stability: bool,
-        out_name: Optional[Union[List, List[str]]] = None
-    ) -> matplotlib.figure.Figure:
-        
-        Plot a Clustered Boxplot for a chosen metric
-
-        Parameters
-        ----------
-        chosen_metric : str
-            name of the metric
-        out_name : str or list of str, optional
-            name of the output file. Default is None
-
-        Returns
-        -------
-        fig : matplotlib.figure.Figure
-            the boxplot
-
-        
-        anchor_list = None
-
-        def get_metric_vars(
-                generic_metric: str) -> Dict[str, hdl.MetricVariable]:
-            _dict = {}
-
-            for dataset in self.get_datasets_from_df(metric_df):
-                for ds_combi, specific_metric in self.metrics_ds_grouped_lut(
-                )[generic_metric].items():
-                    if dataset in ds_combi:
-                        _Var = hdl.MetricVariable(varname=specific_metric,
-                                                  global_attrs=self.ds.attrs)
-                        if _Var.values == None:
-                            _Var.values = metric_df.loc[:,
-                                                        (dataset, slice(None))]
-
-                        _dict[(_Var.get_varmeta()[0][0], _Var.get_varmeta()[1][0])] = _Var
-
-            return _dict
-
-        def get_legend_entries(cbp_obj: ClusteredBoxPlot,
-                               generic_metric: str) -> Dict[str, str]:
-            unit = Var.metric_ds[1]["mu"]
-            _, _, _ scl_ref, _ = Var.get_varmeta()
-            return {
-                f'{Var.metric_ds[0]} & {Var.metric_ds[1]["short_name"]}':
-                cbp_obj.label_template.format(
-                    dataset_name=Var.metric_ds[1]["pretty_name"],
-                    unit=Var.metric_ds[1]["mu"])
-                for Var in get_metric_vars(generic_metric).values()
-            }
-        
-        def get_legend_entries_from_vars(cbp_obj: ClusteredBoxPlot, 
-                                         vars: dict) -> Dict[str, str]:
-            return {f'{i}':cbp_obj.label_template.format(
-                    dataset_name=Var.metric_ds[1]["pretty_name"], #Check if scaled for units
-                    unit=Var.metric_ds[1]["mu"] if not Var.get_varmeta()[3] else Var.get_varmeta()[3][1]["mu"]) if Var.metric_ds[1]['short_name'] in i 
-
-                    else self.cbp.label_template.format(
-                    dataset_name=Var.ref_ds[1]["pretty_name"],
-                    unit=Var.ref_ds[1]["mu"] if not Var.get_varmeta()[3] else Var.get_varmeta()[3][1]["mu"]) if Var.ref_ds[1]['short_name'] in i 
-
-                    else 'Dataset not in Data' for (i, Var) in vars.items()}
-
-        def sanitize_dataframe(df: pd.DataFrame,
-                               column_threshold: float = 0.1,
-                               row_threshold_fraction: float = 0.8,
-                               keep_empty_cols: bool = True) -> pd.DataFrame:
-            
-            Sanitizes a DataFrame by dropping columns and rows based on non-NaN thresholds.
-
-            Parameters
-            ----------
-            df : pd.DataFrame
-                DataFrame to sanitize
-
-            column_threshold : float, optional
-                Fraction of non-NaN values in a column to keep it. Default is 0.1
-
-            row_threshold_fraction : float, optional
-                Fraction of non-NaN values in a row to keep it. Default is 0.8
-
-            keep_empty_cols : bool
-                Whether to keep column names that have non-NaNs below the threshold, but fill them with exclusively NaN. Default is True.
-                This is done for the intra-annual metrics, where each month/season should be represented in the plot
-                even if there is no data for a specific month/dataset in the end. The opposite is true for stability metrics.
-                However if the sanitization leads to an empty dataframe the columns are kept to produce a plot.
-
-            Returns
-            -------
-            df_sanitized : pd.DataFrame
-                Sanitized DataFrame
-            
-
-            min_non_nan_columns = int(column_threshold * len(df))
-
-            columns_to_keep = df.columns[df.notna().sum() >=
-                                         min_non_nan_columns]
-            columns_to_drop = df.columns[df.notna().sum() <
-                                         min_non_nan_columns]
-
-            df_sanitized = df[columns_to_keep]
-
-            min_non_nan_rows = int(row_threshold_fraction *
-                                   len(df_sanitized.columns))
-
-            df_sanitized = df_sanitized.dropna(thresh=min_non_nan_rows)
-            df_sanitized.dropna(inplace=True)
-
-            # Return early if we don't need to keep empty columns and have data
-            if not keep_empty_cols and not df_sanitized.empty:
-                return df_sanitized
-
-            for col in columns_to_drop:
-                df_sanitized[col] = np.nan
-
-            # Reorder the columns to match the original DataFrame
-            df_sanitized = df_sanitized[df.columns]
-
-            return df_sanitized
-
-        metric_df = self.get_metric_df(chosen_metric)
-        Vars = get_metric_vars(chosen_metric)
-        
-        anchor_list = None
-        if stability:
-            # get the first dataset to deduce the number of anchors - important for the boxplot setup
-            unique_groups = metric_df.columns.get_level_values(0).unique()
-            first_df = metric_df.loc[:,
-                                     metric_df.columns.get_level_values(0) ==
-                                     unique_groups[0]]
-            first_df = sanitize_dataframe(first_df, keep_empty_cols=False)
-            anchor_number = len(first_df.columns)
-            anchor_list = np.arange(anchor_number).astype(float)
-
-        # check also for empty anchor_list
-        if anchor_list is None or (isinstance(anchor_list, np.ndarray) and anchor_list.size == 0):
-            anchor_list = self.cbp.anchor_list
-
-        figwidth = globals.boxplot_width_vertical * (len(metric_df.columns) + 1
-                                            )  # otherwise it's too narrow
-        figsize = [figwidth, globals.boxplot_height_vertical]
-        fig_kwargs = {
-            'figsize': figsize,
-            'dpi': 'figure',
-            'bbox_inches': 'tight'
-        }
-
-        legend_entries = get_legend_entries_from_vars(cbp_obj=self.cbp,
-                                            vars=Vars)
-
-        cbp_fig = self.cbp.figure_template(incl_median_iqr_n_axs=False,
-                                           fig_kwargs=fig_kwargs)
-
-        legend_handles = []
-        df_whole = None
-        for dc_num, (dc_val_name, Var) in enumerate(Vars.items()):
-            _df = Var.values  # get the dataframe for the specific metric, potentially with NaNs
-            _df.columns = pd.MultiIndex.from_tuples([(f"{Var.get_varmeta()[0][0]} & {Var.get_varmeta()[1][0]}", l2) for l0, l1, l2 in Var.values.columns],
-                                                    names=["datasets", "time"])
-            if not stability:
-                _df = sanitize_dataframe(
-                    _df, keep_empty_cols=True)  # sanitize the dataframe
-            else:
-                _df = sanitize_dataframe(
-                    _df, keep_empty_cols=False)  # remove redundant columns
-
-            df_long = _df.stack(level=0)
-            df_long.index = df_long.index.set_names(["lat", "lon", "gpi", "dataset"])
-            df_long = df_long.reset_index()
-            df_long = df_long.melt(id_vars=["lat", "lon", "gpi", "dataset"], var_name="year", value_name="value")
-            if isinstance(df_whole, pd.DataFrame):
-                df_whole = pd.concat([df_whole, df_long], ignore_index=True)
-                df_long=None
-            else:
-                df_whole = df_long
-                df_long=None
-
-        box = sns.boxplot(x="year",
-                              y="value",
-                              hue="dataset",
-                              data=df_whole,
-                              palette="Set2",
-                              ax=cbp_fig.ax_box,
-                              showfliers=False,
-                              orient="v",
-                              widths=0.8/df_whole.dataset.nunique(),
-                              dodge=True)
-            
-        box.tick_params(labelsize=globals.fontsize_ticklabel)
-        cbp_fig.ax_box.legend(loc=plm.best_legend_pos_exclude_list(cbp_fig.ax_box), fontsize=globals.fontsize_legend)
-
-        cbp_fig.ax_box.legend(
-            handles=legend_handles,
-            loc=plm.best_legend_pos_exclude_list(cbp_fig.ax_box),
-            fontsize=globals.fontsize_legend)
-        
-        QA4SMPlotter._append_legend_title(cbp_fig, cbp_fig.ax_box, Var)
-
-        xtick_pos = self.cbp.centers_and_widths(anchor_list=anchor_list,
-                                                no_of_ds=1,
-                                                space_per_box_cluster=0.7,
-                                                rel_indiv_box_width=0.8)
-        cbp_fig.ax_box.set_xticks([])
-        cbp_fig.ax_box.set_xticklabels([])
-        cbp_fig.ax_box.set_xticks(xtick_pos[0].centers)
-
-        def get_xtick_labels(df: pd.DataFrame) -> List:
-            _count_dict = df.count().to_dict()
-            return [
-                f"{tsw[1]}\nEmpty" if count == 0 else f"{tsw[1]}"
-                for tsw, count in _count_dict.items()
-            ]
-
-        xtick_labels = get_xtick_labels(_df)
-
-        if len(xtick_labels) > 19 and stability:
-            xtick_labels = [label.replace("\n", " ") for label in xtick_labels]
-            cbp_fig.ax_box.set_xticklabels(xtick_labels)
-            cbp_fig.ax_box.tick_params(axis='x', rotation=315,
-                                       labelsize=globals.fontsize_ticklabel)
-        else:
-            cbp_fig.ax_box.set_xticklabels(xtick_labels)
-        cbp_fig.ax_box.tick_params(
-            axis='both',
-            labelsize=globals.fontsize_ticklabel)
-
-        _dummy_xticks = [
-            cbp_fig.ax_box.axvline(x=(a + b) / 2, color='lightgrey') for a, b
-            in zip(xtick_pos[0].centers[:-1], xtick_pos[0].centers[1:])
-        ]
-
-        title = self.create_title(Var, type='boxplot_basic')
-
-        def get_valid_gpis(df: pd.DataFrame) -> int:
-
-            try:
-                out = list({x for x in df.count() if x > 0})[0]
-            except IndexError:  # if all values are NaN
-                out = 0
-            return out
-
-        title = title + f'\n for the same {get_valid_gpis(_df)} out of {len(metric_df)} GPIs\n'
-
-        cbp_fig.fig.suptitle(
-            title,
-            fontsize=globals.fontsize_title)
-
-        cbp_fig.ax_box.set_ylabel(
-            self.create_label(Var),
-            fontsize=globals.fontsize_label,
-        )
-
-        spth = [
-            Path(
-                f"{globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric = chosen_metric, filetype = 'png')}"
-            )
-        ]
-        if out_name:
-            spth = out_name
-
-        [
-            cbp_fig.fig.savefig(
-                fname=outname,
-                dpi=fig_kwargs['dpi'],
-                bbox_inches=fig_kwargs['bbox_inches'],
-            ) for outname in spth
-        ]
-
-        return cbp_fig.fig"""
     
     def plot_cbp(
         self,
@@ -2284,8 +1989,8 @@ class QA4SMCompPlotter:
         stability: bool,
         out_name: Optional[Union[List, List[str]]] = None
     ) -> matplotlib.figure.Figure:
-        """
-        Plot a Clustered Boxplot for a chosen metric
+        
+        """Plot a Clustered Boxplot for a chosen metric
 
         Parameters
         ----------
@@ -2297,9 +2002,9 @@ class QA4SMCompPlotter:
         Returns
         -------
         fig : matplotlib.figure.Figure
-            the boxplot
+            the boxplot"""
 
-        """
+        
         anchor_list = None
 
         def get_metric_vars(
@@ -2324,8 +2029,8 @@ class QA4SMCompPlotter:
                                column_threshold: float = 0.1,
                                row_threshold_fraction: float = 0.8,
                                keep_empty_cols: bool = True) -> pd.DataFrame:
-            """
-            Sanitizes a DataFrame by dropping columns and rows based on non-NaN thresholds.
+            
+            """Sanitizes a DataFrame by dropping columns and rows based on non-NaN thresholds.
 
             Parameters
             ----------
@@ -2403,13 +2108,17 @@ class QA4SMCompPlotter:
         df_long = metric_df.stack(level=0, future_stack=True)
         df_long.index = df_long.index.set_names(["lat", "lon", "gpi", "dataset"])
         df_long = df_long.reset_index()
-        df_long = df_long.melt(id_vars=["lat", "lon", "gpi", "dataset"], var_name="year", value_name="value").sort_values("dataset", ascending=True)
+        df_long = df_long.melt(id_vars=["lat", "lon", "gpi", "dataset"], var_name="year", value_name="value").sort_values(["dataset", "year"], ascending=True)
         
         unique_combos = df_long["dataset"].unique()
         palette = get_palette_for(unique_combos)
 
         n_lines = len(cbp_fig.ax_box.lines)
-        box = sns.boxplot(x="year",
+        if len(df_long["value"]) == int(df_long["value"].isna().sum()):
+            raise PlotterError(f"There are no valid measurements for this metric ({chosen_metric}) "
+                            "therefore the creation of a plot is skipped.")
+    
+        box = plm.sns_custom_boxplot(x="year",
                               y="value",
                               hue="dataset",
                               data=df_long,
@@ -2422,10 +2131,19 @@ class QA4SMCompPlotter:
         plm.capsizing(box, n_lines)
             
         box.tick_params(labelsize=globals.fontsize_ticklabel)
-        cbp_fig.ax_box.legend(loc=plm.best_legend_pos_exclude_list(cbp_fig.ax_box), fontsize=globals.fontsize_legend)
+
+        # Check if duplicate legend entries
+        handles, labels = cbp_fig.ax_box.get_legend_handles_labels()
+        unique = dict(zip(labels, handles))
+
+        cbp_fig.ax_box.legend(unique.values(),
+                              unique.keys(),
+                              loc=th.best_legend_pos_exclude_list(cbp_fig.ax_box), 
+                              fontsize=globals.fontsize_legend, 
+                              ncol=(len(unique)-1)//5 + 1)
         
         Var = hdl.MetricVariable(varname=self.metrics_ds_grouped_lut()[chosen_metric][list(self.metrics_ds_grouped_lut()[chosen_metric].keys())[0]], global_attrs=self.ds.attrs)
-        QA4SMPlotter._append_legend_title(cbp_fig, cbp_fig.ax_box, Var)
+        th.append_legend_title(cbp_fig, cbp_fig.ax_box, Var)
 
         # Styling of axis
         cbp_fig.ax_box.set_ylabel(self.create_label(Var), fontsize=globals.fontsize_label)
@@ -2464,16 +2182,10 @@ class QA4SMCompPlotter:
 
         title = title + f' for the same {get_valid_gpis(metric_df)} out of {len(metric_df)} GPIs'
 
-        QA4SMPlotter._set_wrapped_title(cbp_fig.fig, cbp_fig.ax_box, title)
+        th.set_wrapped_title(cbp_fig.fig, cbp_fig.ax_box, title)
 
         if globals.draw_logo:
-            plm.add_logo_to_figure(
-                fig=cbp_fig.fig,
-                logo_path=globals.logo_pth,
-                position=globals.logo_position,
-                offset=globals.logo_offset_comp_plots,
-                size=globals.logo_size,
-            )
+            plm.add_logo_to_figure(fig=cbp_fig.fig)
 
         spth = [
             Path(
@@ -2492,4 +2204,3 @@ class QA4SMCompPlotter:
         ]
 
         return cbp_fig.fig
-

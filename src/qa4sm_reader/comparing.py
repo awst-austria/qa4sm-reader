@@ -3,6 +3,7 @@ from qa4sm_reader.handlers import QA4SMMetric
 import qa4sm_reader.globals as glob
 from qa4sm_reader.plotter import QA4SMPlotter
 import qa4sm_reader.plotting_methods as plm
+import qa4sm_reader.texthelpers as th
 
 from shapely.geometry import Polygon
 import matplotlib.pyplot as plt
@@ -617,6 +618,7 @@ class QA4SMComparison:
                                  position=glob.logo_position,
                                  size=glob.logo_size)
         plt.tight_layout()
+        return None
 
     def diff_mapplot(self, metric: str, **kwargs):
         """
@@ -646,13 +648,14 @@ class QA4SMComparison:
                                 diff_map=True,
                                 label=cbar_label,
                                 is_scattered=is_scattered)
-        fonts = {"fontsize": 12}
         title_plot = f"Overview of the difference in {Metric.pretty_name} " \
-                     f"against the reference {self.ref['pretty_title']}"
-        axes.set_title(title_plot, pad=glob.title_pad, **fonts)
-
-        plm.make_watermark(fig, glob.watermark_pos, offset=0.01)
-
+                    f"against the reference {self.ref['pretty_title']}"
+        th.set_wrapped_title(fig, axes, title_plot)
+        plm.add_logo_in_bg_front(fig, 
+                                logo_path=glob.logo_pth,
+                                position=glob.logo_position,
+                                size=glob.logo_size)
+        plt.close(fig)
         return fig
 
     def wrapper(self, method: str, metric=None, **kwargs):
@@ -683,5 +686,4 @@ class QA4SMComparison:
             raise ComparisonError(
                 "If you chose '{}' as a method, you should specify"
                 " a metric (e.g. 'R').".format(method))
-
         return diff_method(metric=metric, **kwargs)
