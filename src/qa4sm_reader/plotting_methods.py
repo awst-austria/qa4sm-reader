@@ -48,13 +48,9 @@ import warnings
 import os
 from collections import namedtuple
 
-import textwrap
-
 # Change of standard matplotlib parameters
 matplotlib.rcParams['legend.framealpha'] = globals.legend_alpha
 plt.rcParams['hatch.linewidth'] = globals.hatch_linewidth
-# Change of standard seaborn boxplot parameters through monkeypatching
-_old_boxplot = sns.boxplot
 
 def sns_custom_boxplot(*args, **kwargs):
     """
@@ -136,7 +132,7 @@ def non_overlapping_markersize(ax, scatter):
             (radius_points**2))
     return size
 
-def _float_gcd(a, b, atol=1e-06):
+def _float_gcd(a, b, atol=1e-04):
     "Greatest common divisor (=groesster gemeinsamer teiler)"
     scale = 1/atol # Scale to avoid floating point errors more robustly
     ai = int(round(a*scale))
@@ -148,6 +144,9 @@ def _get_grid(a):
     "Find the stepsize of the grid behind a and return the parameters for that grid axis."
     a = np.unique(a)  # get unique values and sort
     das = np.unique(np.diff(a))  # get unique stepsizes and sort
+    if len(das) > 10: # If there are a lot of differing stepsizes no regular grid can be reconstructed
+        a_min, a_max, da, len_a = _get_grid_for_irregulars(a, das[0] if das[0]>0.01 else 0.01)
+        return a_min, a_max, da, len_a
     da = das[0]  # get smallest stepsize
     dal = []
     for d in das[1:]:  # make sure, all stepsizes are multiple of da
@@ -156,6 +155,10 @@ def _get_grid(a):
     a_min = a[0]
     a_max = a[-1]
     len_a = int((a_max - a_min) / da + 1)
+    # if there are more columns/rows than can be computed increase cell size by factor 2
+    while len_a > 2**16: 
+        da = da*2
+        len_a = int((a_max - a_min) / da + 1)
     return a_min, a_max, da, len_a
 
 
@@ -166,6 +169,10 @@ def _get_grid_for_irregulars(a, grid_stepsize):
     a_max = a[-1]
     da = grid_stepsize
     len_a = int((a_max - a_min) / da + 1)
+     # if there are more columns/rows than can be computed increase cell size by factor 2
+    while len_a > 2**16: 
+        da = da*2
+        len_a = int((a_max - a_min) / da + 1)
     return a_min, a_max, da, len_a
 
 

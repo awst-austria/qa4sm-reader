@@ -588,7 +588,10 @@ class QA4SMComparison:
             metric name which the plot is based on
         """
         self.perform_checks(pairwise=True)
-        df, ci = self._get_pairwise(metric=metric, return_cis=True)
+        #df, ci = self._get_pairwise(metric=metric, return_cis=True)
+        #CI was turned off when multi-combo was introduced
+        df = self._get_pairwise(metric=metric, return_cis=False)
+        ci = None
         # prepare axis name
         Metric = QA4SMMetric(metric)
         ref_ds = self.ref['short_name']
@@ -596,8 +599,6 @@ class QA4SMComparison:
             glob.get_metric_units(ref_ds))
         figwidth = glob.boxplot_width * (len(df.columns) + 1)
         figsize = [figwidth, glob.boxplot_height]
-        df = df.reset_index().melt(id_vars = ["lat", "lon", "gpi"], var_name = "label", value_name="value").sort_values("label")
-        df["validation"] = [df["label"][i].split("Val")[1][:1] if len(df["label"][i].split("Val")) == 2 else f"{df["label"][i].split("Val")[1][:1]} - {df["label"][i].split("Val")[2][:1]}" for i in df.index]
         df = df.reset_index().melt(id_vars = ["lat", "lon", "gpi"], var_name = "label", value_name="value").sort_values("label")
         df["validation"] = [df["label"][i].split("Val")[1][:1] if len(df["label"][i].split("Val")) == 2 else f"{df["label"][i].split("Val")[1][:1]} - {df["label"][i].split("Val")[2][:1]}" for i in df.index]
         fig, axes = plm.boxplot(
