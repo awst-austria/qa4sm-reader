@@ -1,8 +1,11 @@
 from typing import Optional, Tuple, Dict, Literal
+
+import matplotlib
 from qa4sm_reader.plotting_methods import (_replace_status_values, init_plot,
                                            get_plot_extent, Patch,
                                            geotraj_to_geo2d, _make_cbar,
-                                           style_map)
+                                           style_map,
+                                           non_overlapping_markersize)
 import copy
 from qa4sm_reader import globals
 import pandas as pd
@@ -16,7 +19,6 @@ import re
 import numpy as np
 
 sns.set_context("notebook")
-
 
 status = {
     -1: 'Other error',
@@ -67,9 +69,9 @@ metric_pretty_names = {
     'status': 'Validation success status',
     # 'tau': 'Kendall rank correlation',        # currently QA4SM is hardcoded not to calculate kendall tau
     # 'p_tau': 'Kendall tau p-value',
-    'slopeR' : 'Theil-Sen slope of R',
-    'slopeURMSD' : 'Theil-Sen slope of urmsd',
-    'slopeBIAS' : 'Theil-Sen slope of BIAS'
+    'slopeR': 'Theil-Sen slope of R',
+    'slopeURMSD': 'Theil-Sen slope of urmsd',
+    'slopeBIAS': 'Theil-Sen slope of BIAS'
 }
 metric_value_ranges = {  # from /qa4sm/validator/validation/graphics.py
     'R': [-1, 1],
@@ -138,7 +140,7 @@ def select_column_by_all_keywords(dataframe: pd.DataFrame, datasets: list,
                              "'ISMN'. The available datasets are: {}".format(
                 datasets_in_df))
         else:
-            pattern = r"^"+ metric.lower() +r"_\d-"+datasets[0].upper()
+            pattern = r"^" + metric.lower() + r"_\d-" + datasets[0].upper()
             for column in dataframe.columns:
                 # Check if all keywords are present in the column name (case
                 # insensitive)
@@ -202,7 +204,7 @@ class CustomPlotObject:
         print(
             """Metrics: """)
         for metric in valid_metrics:
-            print("- "+metric+": "+metric_pretty_names[metric])
+            print("- " + metric + ": " + metric_pretty_names[metric])
 
     def plot_map(self, metric: str, output_dir: str,
                  colormap: Optional[str] = None,
@@ -295,7 +297,23 @@ class CustomPlotObject:
         else:
             ref_dataset = None
 
-        custom_mapplot(
+        # custom_mapplot(
+        #     df=self.df,
+        #     column_name=column_name,
+        #     ref_short=ref_dataset,
+        #     metric=metric,
+        #     plot_extent=extent,
+        #     colormap=colormap,
+        #     value_range=value_range,
+        #     label=colorbar_label,
+        #     title=title,
+        #     title_fontsize=title_fontsize,
+        #     output_dir=output_dir,
+        #     figsize=plotsize,
+        #     xyticks_fontsize=xy_ticks_fontsize,
+        #     colorbar_ticks_fontsize=colorbar_ticks_fontsize,
+        # )
+        mapplot(
             df=self.df,
             column_name=column_name,
             ref_short=ref_dataset,
@@ -535,3 +553,262 @@ def custom_mapplot(
     plt.tight_layout()
     plt.savefig(f"{output_dir}/{column_name}_map.png", dpi=100)
     return fig, ax
+
+
+def mapplot(
+        df: pd.DataFrame,
+        column_name: str,
+        ref_short: str,
+        metric: str,
+        scl_short: Optional[str] = None,
+        ref_grid_stepsize: Optional[float] = None,
+        plot_extent: Optional[Tuple[float, float, float, float]] = None,
+        colormap: Optional[str] = None,
+        projection: Optional[ccrs.Projection] = None,
+        add_cbar: Optional[bool] = True,
+        label: Optional[str] = None,
+        figsize: Optional[Tuple[float, float]] = globals.map_figsize,
+        dpi: Optional[int] = globals.dpi_min,
+        diff_map: Optional[bool] = False,
+        value_range: Optional[Tuple[float, float]] = None,
+        output_dir: Optional[str] = None,
+        title: Optional[str] = None,
+        title_fontsize: Optional[int] = None,
+        xyticks_fontsize: Optional[int] = None,
+        colorbar_ticks_fontsize: Optional[int] = None,
+        **style_kwargs: Dict
+) -> Tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]:
+    """
+        Create an overview map from df using values as color. Plots a scatterplot for ISMN and an image plot for other
+        input values.
+
+        Parameters
+        ----------
+        df : pandas.Series
+            values to be plotted. Generally from metric_df[Var]
+        metric : str
+            name of the metric for the plot
+        ref_short : str
+                short_name of the reference dataset (read from netCDF file)
+        scl_short : str, default is None
+            short_name of the scaling dataset (read from netCDF file).
+            None if no scaling method is selected in validation.
+        ref_grid_stepsize : float or None, optional (None by default)
+                angular grid stepsize, needed only when ref_is_angular == False,
+        plot_extent : tuple or None
+                (x_min, x_max, y_min, y_max) in Data coordinates. The default is None.
+        colormap :  Colormap, optional
+                colormap to be used.
+                If None, defaults to globals._colormaps.
+        projection :  cartopy.crs, optional
+                Projection to be used. If none, defaults to globals.map_projection.
+                The default is None.
+        add_cbar : bool, optional
+                Add a colorbar. The default is True.
+        label : str, optional
+            Label of the y-axis, describing the metric. If None, a label is autogenerated from metadata.
+            The default is None.
+        figsize : tuple, optional
+            Figure size in inches. The default is globals.map_figsize.
+        dpi : int, optional
+            Resolution for raster graphic output. The default is globals.dpi.
+        diff_map : bool, default is False
+            if True, a difference colormap is created
+        **style_kwargs :
+            Keyword arguments for plotter.style_map().
+
+        Returns
+        -------
+        fig : matplotlib.figure.Figure
+            the boxplot
+        ax : matplotlib.axes.Axes
+        """
+
+    if not colormap:
+        try:
+            cmap = globals._colormaps[metric]
+        except:
+            cmap = globals._colormaps[
+                metric.split('_')[0] if '_' in metric else metric]
+    else:
+        cmap = colormap
+    # if not colormap:
+    #     cmap = globals._colormaps[metric]
+    # else:
+    #     cmap = colormap
+
+    if value_range is None:
+        v_min, v_max = metric_value_ranges[metric]
+    else:
+        v_min, v_max = value_range
+    # v_min, v_max = get_value_range(df, metric)
+    # everything changes if the plot is a difference map
+    if diff_map:
+        # v_min, v_max = get_value_range(df, metric=None, diff_map=True)
+        if value_range is None:
+            v_min, v_max = metric_value_ranges[metric]
+        else:
+            v_min, v_max = value_range
+        cmap = globals._diff_colormaps[metric]
+
+    # if metric == 'status':
+    #     df = _replace_status_values(df)
+    #     labs = list(globals.status.values())
+    #     cls = globals.get_status_colors().colors
+    #     vals = sorted(list(set(df.values)))
+    #     add_cbar = False
+    df = df[column_name]
+    if metric == 'status':
+        df = _replace_status_values(df)
+        labs = list(globals.status.values())
+        cls = globals.get_status_colors().colors
+        vals = sorted(list(set(df.values)))
+        add_cbar = False
+    # No need to mask ranged in the comparison plots
+    else:
+        # mask values outside range (e.g. for negative STDerr from TCA)
+        if metric in globals._metric_mask_range.keys():
+            mask_under, mask_over = globals._metric_mask_range[
+                metric]  # get values from scratch to disregard quantiles
+            cmap = copy.copy(cmap)
+            if mask_under is not None:
+                v_min = mask_under
+                cmap.set_under("red")
+            if mask_over is not None:
+                v_max = mask_over
+                cmap.set_over("red")
+
+    # initialize plot
+    fig, ax = init_plot(figsize, dpi, projection)
+
+    # scatter point or mapplot
+    if ref_short in globals.scattered_datasets:  # scatter
+        if not plot_extent:
+            plot_extent = get_plot_extent(df)
+        df = df.groupby(["lat",
+                         "lon"]).mean()  # Because One Station can have multiple sensors the average value between these sensors is taken
+        df_na = df[df.isna()]
+        df_num = df[df.notna()]
+        lat, lon, gpi = globals.index_names
+        x, y = df_num.index.get_level_values(
+            lon), df_num.index.get_level_values(lat)
+        im = ax.scatter(x,
+                        y,
+                        c=df_num,
+                        cmap=cmap,
+                        s=globals.min_markersize,
+                        vmin=v_min,
+                        vmax=v_max,
+                        edgecolors='black',
+                        linewidths=0.7,
+                        zorder=5,
+                        transform=globals.data_crs,
+                        label="Values computed")
+        im_nan = ax.scatter(df_na.index.get_level_values(lon),
+                            df_na.index.get_level_values(lat),
+                            c="k",
+                            marker=".",
+                            s=globals.nan_markersize,
+                            zorder=4,
+                            transform=globals.data_crs,
+                            label="No value computed")  # represent nan values as a dot to not confuse them with 0-values
+        if metric == 'status':
+            ax.legend(handles=[
+                Patch(facecolor=cls[x], label=labs[x])
+                for x in range(len(globals.status)) if (x - 1) in vals
+            ],
+                loc='lower center',
+                ncol=4,
+                fontsize=globals.fontsize_legend)
+
+    else:  # mapplot
+        if not plot_extent:
+            plot_extent = get_plot_extent(df,
+                                          grid_stepsize=ref_grid_stepsize,
+                                          grid=True)
+        if isinstance(ref_grid_stepsize, np.ndarray):
+            ref_grid_stepsize = ref_grid_stepsize[0]
+        zz, zz_extent, origin = geotraj_to_geo2d(
+            df, grid_stepsize=ref_grid_stepsize)  # prep values
+        im = ax.imshow(zz,
+                       cmap=cmap,
+                       vmin=v_min,
+                       vmax=v_max,
+                       interpolation='nearest',
+                       origin=origin,
+                       extent=zz_extent,
+                       transform=globals.data_crs,
+                       zorder=2)
+
+        if metric == 'status':
+            ax.legend(handles=[
+                Patch(facecolor=cls[x], label=labs[x])
+                for x in range(len(globals.status)) if (x - 1) in vals
+            ],
+                loc='lower center',
+                ncol=4,
+                fontsize=globals.fontsize_legend)
+
+    # style_map(ax, plot_extent, **style_kwargs)
+    if ref_short in globals.scattered_datasets:
+        if len(df) < 400:  # For a high amount of points the minimum markersize is kept
+            s = non_overlapping_markersize(ax, im)
+            im.set_sizes([s])
+
+    if add_cbar:  # colorbar
+        # fig, im = _make_cbar(fig,
+        #                      ax,
+        #                      im,
+        #                      ref_short,
+        #                      metric,
+        #                      label=label,
+        #                      diff_map=diff_map,
+        #                      scl_short=scl_short)
+
+        try:
+            fig, im, cax = _make_cbar(fig,
+                                      ax,
+                                      im,
+                                      ref_short,
+                                      metric,
+                                      label=label,
+                                      diff_map=diff_map,
+                                      scl_short=scl_short)
+            d = 1
+        except:
+            fig, im = _make_cbar(fig,
+                                 ax,
+                                 im,
+                                 ref_short,
+                                 metric.split('_')[0],
+                                 label=label,
+                                 diff_map=diff_map,
+                                 scl_short=scl_short)
+            fig, im, cax = _make_cbar(fig,
+                                      ax,
+                                      im,
+                                      ref_short,
+                                      metric.split('_')[0],
+                                      label=label,
+                                      diff_map=diff_map,
+                                      scl_short=scl_short)
+
+        if colorbar_ticks_fontsize:
+            # ax.tick_params(labelsize=colorbar_ticks_fontsize)
+            cbar_ax = fig.axes[-1]
+            cbar_ax.tick_params(labelsize=colorbar_ticks_fontsize)
+
+
+    # if legend wasn't created yet creat one
+    if (ax.get_legend() is None) and (ref_short in globals.scattered_datasets):
+        ax.legend(borderpad=0.6)
+    style_map(ax, plot_extent, grid_tick_size=xyticks_fontsize, **style_kwargs)
+
+    if title is not None and title_fontsize is not None:
+        ax.set_title(title, fontsize=title_fontsize)
+    elif title is not None:
+        ax.set_title(title)
+    plt.savefig(f"{output_dir}/{column_name}_map.png", dpi=300)
+    return fig, ax
+
+

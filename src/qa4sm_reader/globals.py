@@ -24,7 +24,7 @@ no_print_period = ["bulk"] # List of period names which should not be printed in
 
 dpi_min = 100  # Resolution in which plots are going to be rendered.
 dpi_max = 200
-title_pad = 12  # Padding below the title in points. default padding is matplotlib.rcParams['axes.titlepad'] = 6.0
+title_pad = 12.0  # Padding below the title in points. default padding is matplotlib.rcParams['axes.titlepad'] = 6.0
 data_crs = ccrs.PlateCarree()  # Default map projection. use one of
 legend_alpha = 0.7
 ci_alpha = 0.4
@@ -62,7 +62,7 @@ map_ax_height = 0.75
 
 cax_width =0.03
 
-resolution_th = [5, 30] # If one of the axis has an extent [°] below the thresholds change to finer resolution 
+resolution_th = [5, 30] # If one of the axis has an extent [°] below the thresholds change to finer resolution
 naturalearth_resolution = ["10m",'50m','110m']  # One of '10m', '50m' and '110m'. Finer resolution slows down plotting. see https://www.naturalearthdata.com/
 crs = ccrs.PlateCarree(
 )  # projection. Must be a class from cartopy.crs. Note, that plotting labels does not work for most projections.
@@ -238,7 +238,7 @@ _cclasses_old = {
         'PuOr'
     ]  # diverging colormap for slopeURMSD
 }
-    
+
 # new cclasses
 _cclasses_new = {
     'div_better': colorcet.m_CET_D1A_r,  # diverging: 1 good, 0 special, -1 bad (pearson's R, spearman's rho')
@@ -594,6 +594,7 @@ _dataset_pretty_names = {  # from qa4sm\validator\fixtures\datasets.json
     'ERA5_LAND': 'ERA5-Land',
     'ESA_CCI_SM_active': 'ESA CCI SM active',
     'ESA_CCI_SM_combined': 'ESA CCI SM combined',
+    'ESA_CCI_SM_combined_MR' : 'ESA CCI SM combined MR',
     'ESA_CCI_SM_passive': 'ESA CCI SM passive',
     'ESA_CCI_RZSM': 'ESA CCI Root-zone SM',
     'SMOS_IC': 'SMOS IC',
@@ -712,6 +713,7 @@ def get_resolution_info(dataset, raise_error=False):
         'ERA5_LAND': 0.1,
         'ESA_CCI_SM_active': 0.25,
         'ESA_CCI_SM_combined': 0.25,
+        'ESA_CCI_SM_combined_MR' : 0.1,
         'ESA_CCI_SM_passive': 0.25,
         'ESA_CCI_RZSM': 0.25,
         'SMOS': 25,   # old name, unused
@@ -740,6 +742,7 @@ def get_resolution_info(dataset, raise_error=False):
         'ERA5_LAND': 'deg',
         'ESA_CCI_SM_active': 'deg',
         'ESA_CCI_SM_combined': 'deg',
+        'ESA_CCI_SM_combined_MR' : 'deg',
         'ESA_CCI_SM_passive': 'deg',
         'ESA_CCI_RZSM': 'deg',
         'SMOS': 'km',   # old name, unused
@@ -990,6 +993,7 @@ DATASETS = [
     'SMAP_L3',
     'ASCAT',
     'ESA_CCI_SM_combined',
+    'ESA_CCI_SM_combined_MR',
     'ESA_CCI_SM_active',
     'ESA_CCI_SM_passive',
     'ESA_CCI_RZSM',
