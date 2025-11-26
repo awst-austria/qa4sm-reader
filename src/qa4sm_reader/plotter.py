@@ -1309,8 +1309,11 @@ class QA4SMPlotter:
             ax_first = axes
         else:
             ax_first = axes.flat[0]
-
-        ax_first.legend(fontsize=globals.fontsize_legend, 
+        handles, labels = ax_first.get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        ax_first.legend(by_label.values(),
+                        by_label.keys(),
+                        fontsize=globals.fontsize_legend, 
                         ncol=(len(ax_first.get_legend_handles_labels()[0])-1)//5 + 1).set_loc("upper left")
         _, ax_first = th.append_legend_title(fig, ax_first, Var)
         

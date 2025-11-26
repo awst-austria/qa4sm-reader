@@ -2013,7 +2013,7 @@ def aggregate_subplots(to_plot: dict, funct, **kwargs):
     sub_n = len(to_plot.keys())
     if "n_bins" not in kwargs.keys():
         kwargs["n_bins"] = 1
-    if kwargs["n_bins"]*len(to_plot[list(to_plot.keys())[0]].columns) > globals.aggregated_max_boxes:
+    if len(set(to_plot[list(to_plot.keys())[0]].columns)) > globals.aggregated_max_boxes:
         raise PlotterError(
             f"There are too many boxes (categories * dataset_combinations: {len(to_plot)}*{len(to_plot[list(to_plot.keys())[0]].columns)} " \
             f"= {len(to_plot)*len(to_plot[list(to_plot.keys())[0]].columns)}). A maximum of {globals.aggregated_max_boxes} boxes " \
@@ -2264,7 +2264,11 @@ def bplot_catplot(to_plot,
     axis.set_axisbelow(True)
     axis.spines['right'].set_visible(False)
     axis.spines['top'].set_visible(False)
-    axis.legend(loc=th.best_legend_pos_exclude_list(axis), 
+    handles, labels = axis.get_legend_handles_labels() #to deal with duplicate legend entries
+    by_label = dict(zip(labels, handles))
+    axis.legend(by_label.values(), 
+                by_label.keys(),
+                loc=th.best_legend_pos_exclude_list(axis), 
                 fontsize=globals.fontsize_legend, 
                 ncol=(len(axis.get_legend_handles_labels()[0])-1)//5 + 1)
 
