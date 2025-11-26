@@ -62,7 +62,6 @@ def sns_custom_boxplot(*args, **kwargs):
         kwargs_no_legend = kwargs.copy()
         kwargs_no_legend['legend'] = False
         ax = sns.boxplot(*args, **kwargs_no_legend)
-    ax = sns.boxplot(*args, **kwargs)
 
     # Manually apply QA4SM styling to boxes
     for patch in getattr(ax, "patches", []):  # box artists
@@ -2027,6 +2026,7 @@ def aggregate_subplots(to_plot: dict, funct, **kwargs):
             UserWarning
         )
         return None, None
+
     if sub_n == 1:
         for n, (bin_label, data) in enumerate(to_plot.items()):
             # fig = plt.figure()
@@ -2174,9 +2174,6 @@ def bplot_catplot(to_plot,
 
     unique_combos = to_plot.set_index(np.arange(to_plot.index.size))["Dataset"].unique()
     palette = get_palette_for(unique_combos)
-    if len(to_plot["values"]) == int(to_plot["values"].isna().sum()):
-        raise PlotterError(f"There are no valid measurements for this metric ({axis_name}) metadata ({metadata_name}) combination "
-                         "therefore the creation of a plot is skipped.")
 
     box = sns_custom_boxplot(
         x=x,
