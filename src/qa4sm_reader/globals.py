@@ -31,7 +31,8 @@ ci_alpha = 0.4
 
 palette = sns.color_palette("Set2") #seaborn color palette used for dataset combination --> colors.py, colorblindfriendly options "Set2", "Dark2", "colorblind", ("Paired" not really useable in this case)
 exclude_from_palette = [6] # index of colors which you want removed from the set (depends on n_colors), for example 6 for "Set2" due to it just being not so nice to look at
-color_palette_combinations = [c for i, c in enumerate(palette) if i not in exclude_from_palette]
+extra_colors = [] # colors that should be specifically included to the front of the palette
+color_palette_combinations = extra_colors + [c for i, c in enumerate(palette) if i not in exclude_from_palette]
 color_palette_combinations_2 = sns.color_palette("Dark2") #if more combinations than len(color_palette_combinations)
 
 # === font defaults ===

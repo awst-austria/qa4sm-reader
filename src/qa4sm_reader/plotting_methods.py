@@ -1236,7 +1236,7 @@ def get_box_bbox_data(ax, box):
     x1, y1 = np.max(verts_data, axis=0)
     return x0, y0, x1, y1
 
-def triangle_hatching(ax, box, dist=0.5, direction="up", zorder=-1, linewidth=1, color="k", alpha=1):
+def triangle_hatching(ax, box, dist=0.5, direction="up", zorder=-1, linewidth=1, color="k", alpha=1, pad=0.01):
     """
     Draw triangular hatching inside a box patch using a LineCollection (fast).
 
@@ -1266,6 +1266,9 @@ def triangle_hatching(ax, box, dist=0.5, direction="up", zorder=-1, linewidth=1,
         Color of the hatch lines.
     alpha : float, default=1
         Opacity of the hatch lines (0=transparent, 1=opaque).
+    pad : float, default=0.01
+        Determines padding between sides of boxplot and start of triangle hatching 
+        (boxplot rectangle gets reduced on all sides) to prevent overlapping. (0-0.49)
 
     Notes
     -----
@@ -1275,7 +1278,9 @@ def triangle_hatching(ax, box, dist=0.5, direction="up", zorder=-1, linewidth=1,
     """
 
     # Get bounding box in data coordinates
-    x0, y0, x1, y1 = get_box_bbox_data(ax, box)
+    x0_box, y0_box, x1_box, y1_box = get_box_bbox_data(ax, box)
+    x0, y0, x1, y1 = x0_box + (x1_box-x0_box)*pad, y0_box + (y1_box-y0_box)*pad, x1_box - (x1_box-x0_box)*pad, y1_box - (y1_box-y0_box)*pad
+    print(x0, y0, x1, y1)
     lines = []
 
     if direction in ("up", "down"):
