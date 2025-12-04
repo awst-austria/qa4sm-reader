@@ -62,7 +62,6 @@ def sns_custom_boxplot(*args, **kwargs):
         kwargs_no_legend = kwargs.copy()
         kwargs_no_legend['legend'] = False
         ax = sns.boxplot(*args, **kwargs_no_legend)
-    ax = sns.boxplot(*args, **kwargs)
 
     # Manually apply QA4SM styling to boxes
     for patch in getattr(ax, "patches", []):  # box artists
@@ -127,8 +126,8 @@ def non_overlapping_markersize(ax, scatter):
     # convert pixel radius → points² (as required by scatter s)
     # 1 point = fig.dpi/72 pixels
     radius_points = dp * 72.0 / ax.figure.dpi
-    size = (globals.min_markersize if (radius_points**2) < globals.min_markersize else 
-            globals.max_markersize if (radius_points**2) > globals.max_markersize else 
+    size = (globals.min_markersize if (radius_points**2) < globals.min_markersize else
+            globals.max_markersize if (radius_points**2) > globals.max_markersize else
             (radius_points**2))
     return size
 
@@ -156,7 +155,7 @@ def _get_grid(a):
     a_max = a[-1]
     len_a = int((a_max - a_min) / da + 1)
     # if there are more columns/rows than can be computed increase cell size by factor 2
-    while len_a > 2**16: 
+    while len_a > 2**16:
         da = da*2
         len_a = int((a_max - a_min) / da + 1)
     return a_min, a_max, da, len_a
@@ -170,7 +169,7 @@ def _get_grid_for_irregulars(a, grid_stepsize):
     da = grid_stepsize
     len_a = int((a_max - a_min) / da + 1)
      # if there are more columns/rows than can be computed increase cell size by factor 2
-    while len_a > 2**16: 
+    while len_a > 2**16:
         da = da*2
         len_a = int((a_max - a_min) / da + 1)
     return a_min, a_max, da, len_a
@@ -452,10 +451,10 @@ def init_plot(figsize,
         fig = fig_template.fig
         ax_main = fig_template.ax_main
 
-    ax_main = fig.add_axes([globals.map_ax_left, 
-                            globals.map_ax_bottom, 
-                            globals.map_ax_width, 
-                            globals.map_ax_height], 
+    ax_main = fig.add_axes([globals.map_ax_left,
+                            globals.map_ax_bottom,
+                            globals.map_ax_width,
+                            globals.map_ax_height],
                             projection=projection)
 
     return fig, ax_main
@@ -504,8 +503,8 @@ def style_map(
     ax.set_extent(plot_extent, crs=globals.data_crs)
     ax.spines["geo"].set_linewidth(ax.spines["top"].get_linewidth())
     min_extent = min ([abs(plot_extent[0]-plot_extent[1]), abs(plot_extent[2]-plot_extent[3])])
-    map_resolution = (globals.naturalearth_resolution[0] if min_extent <= globals.resolution_th[0] else 
-                      globals.naturalearth_resolution[1] if min_extent <= globals.resolution_th[1] else 
+    map_resolution = (globals.naturalearth_resolution[0] if min_extent <= globals.resolution_th[0] else
+                      globals.naturalearth_resolution[1] if min_extent <= globals.resolution_th[1] else
                       globals.naturalearth_resolution[2])
 
     if add_grid:
@@ -563,11 +562,11 @@ def style_map(
                                             facecolor=globals.map_land_color)
         ax.add_feature(land, zorder=1)
     if add_water:
-        ocean = cfeature.NaturalEarthFeature(category='physical', 
-                                             name='ocean', 
-                                             scale=map_resolution, 
+        ocean = cfeature.NaturalEarthFeature(category='physical',
+                                             name='ocean',
+                                             scale=map_resolution,
                                              facecolor=globals.map_water_color)
-        
+
         ax.add_feature(ocean)
     if add_borders:
         borders = cfeature.NaturalEarthFeature('cultural',
@@ -709,7 +708,7 @@ def add_logo_in_bg_front(
     logo_width_px = wm_w * dpi / 72.0
 
     # convert to figure coordinates
-    
+
     logo_height_fig = logo_height_px / (fig.get_figheight() * dpi)
     logo_width_fig  = logo_width_px  / (fig.get_figwidth()  * dpi)
 
@@ -718,7 +717,7 @@ def add_logo_in_bg_front(
         bbox = ax.get_position()
         if "bg" in position and not hasattr(ax, 'projection'):
             ax.set_facecolor("none")
-        
+
         if globals.n_logo > 1: # Automatically adjust multiple logos
             s = 1
             for i in range(globals.n_logo):
@@ -741,7 +740,7 @@ def add_logo_in_bg_front(
 
                 if "bg" in position and not hasattr(ax, 'projection'):
                     ax_logo.set_zorder(-1)
-                
+
         elif globals.n_logo == 1: # Only one logo
             # logo axes
             # Lower Left Corner horizontal position
@@ -758,7 +757,7 @@ def add_logo_in_bg_front(
             elif any(sub in ["lower"] for sub in position.split("_")):
                 bottom = bbox.y0 + globals.logo_pad
             else: # center or not specified
-                bottom = bbox.x0 + bbox.height/2 - logo_height_fig/2            
+                bottom = bbox.x0 + bbox.height/2 - logo_height_fig/2
 
             ax_logo = fig.add_axes([
                 left,
@@ -858,7 +857,7 @@ def add_logo_to_figure(
 
     for eb in extras:
         bbox_fig = matplotlib.transforms.Bbox.union([bbox_fig, eb])
-    
+
     if 'lower' in position:
         bottom = bbox_fig.y0 - logo_height_fig - y_pad_fig
     elif 'upper' in position:
@@ -872,7 +871,7 @@ def add_logo_to_figure(
         left = 0.5 - logo_width_fig/2 + offset.x
     elif 'right' in position:
         left = 1 - logo_width_fig + offset.x
-    
+
     # Add logo axis
     ax_logo = fig.add_axes([left, bottom, logo_width_fig, logo_height_fig])
     ax_logo.imshow(im)
@@ -915,7 +914,7 @@ def _make_cbar(fig,
     if im is None or not hasattr(im, "get_array") or im.get_array() is None:
         warnings.warn("Skipping colorbar: invalid or empty image handle")
         return fig, im, None
-    
+
     if label is None:
         label = globals._metric_name[metric]
 
@@ -930,20 +929,20 @@ def _make_cbar(fig,
     except Exception as e:
         warnings.warn(f"Couldn't draw figure for initializing renderer: {e}")
         pass
-    
+
     bbox = ax.get_position()
 
     labels = []
     min_fontsize = 1.0  # minimum valid fontsize
     default_fontsize = max(globals.fontsize_ticklabel, min_fontsize)
-    
+
     for lbl in ax.get_xticklabels():
         text = lbl.get_text()
         if not text:
             continue  # skip empty labels
-        
+
         lbl.set_visible(True)  # ensure label is visible
-        
+
         # Force valid font size BEFORE any rendering operation
         try:
             fs = lbl.get_fontsize()
@@ -951,7 +950,7 @@ def _make_cbar(fig,
                 lbl.set_fontsize(default_fontsize)
         except Exception:
             lbl.set_fontsize(default_fontsize)
-        
+
         # Optionally skip labels off-axis
         try:
             x, y = lbl.get_position()
@@ -959,50 +958,50 @@ def _make_cbar(fig,
                 continue
         except Exception:
             pass  # include label if position check fails
-        
+
         labels.append(lbl)
-    
+
     if not labels:
         warnings.warn("No tick labels found for colorbar placement — using fallback positioning.")
         # Use axis position as fallback
         pad = 0.02  # 2% of figure height
-        cax = fig.add_axes([bbox.x0, bbox.y0 - globals.cax_width - pad, 
+        cax = fig.add_axes([bbox.x0, bbox.y0 - globals.cax_width - pad,
                            bbox.width, globals.cax_width])
         cbar = fig.colorbar(im, cax=cax, orientation='horizontal', extend=extend)
-        
+
         # Set label with validation
         try:
             fontsize = globals.fontsize_label
             cbar.set_label(label, fontsize=fontsize)
         except Exception as e:
             warnings.warn(f"Could not set colorbar label: {e}")
-        
+
         cbar.outline.set_linewidth(0.6)
         cbar.outline.set_edgecolor('black')
         cbar.ax.tick_params(width=0.6, labelsize=default_fontsize)
         return fig, im, cax
-    
+
     # Try to get renderer, with fallback
     try:
         renderer = fig.canvas.get_renderer()
     except Exception as e:
         warnings.warn(f"Could not get renderer: {e}. Using fallback colorbar positioning.")
         pad = 0.02
-        cax = fig.add_axes([bbox.x0, bbox.y0 - globals.cax_width - pad, 
+        cax = fig.add_axes([bbox.x0, bbox.y0 - globals.cax_width - pad,
                            bbox.width, globals.cax_width])
         cbar = fig.colorbar(im, cax=cax, orientation='horizontal', extend=extend)
-        
+
         try:
             fontsize = globals.fontsize_label
             cbar.set_label(label, fontsize=fontsize)
         except Exception:
             pass
-        
+
         cbar.outline.set_linewidth(0.6)
         cbar.outline.set_edgecolor('black')
         cbar.ax.tick_params(width=0.6, labelsize=default_fontsize)
         return fig, im, cax
-    
+
     # Get bounding boxes with individual error handling
     valid_bboxes = []
     for lbl in labels:
@@ -1011,50 +1010,50 @@ def _make_cbar(fig,
             fs = lbl.get_fontsize()
             if not np.isfinite(fs) or fs < min_fontsize:
                 lbl.set_fontsize(default_fontsize)
-            
+
             bbox_lbl = lbl.get_window_extent(renderer=renderer).transformed(fig.transFigure.inverted())
-            
+
             # Validate bbox
-            if (np.isfinite(bbox_lbl.y0) and np.isfinite(bbox_lbl.y1) and 
+            if (np.isfinite(bbox_lbl.y0) and np.isfinite(bbox_lbl.y1) and
                 np.isfinite(bbox_lbl.x0) and np.isfinite(bbox_lbl.x1)):
                 valid_bboxes.append(bbox_lbl)
         except (RuntimeError, ValueError, AttributeError) as e:
             # Skip this label silently - we already warned about invalid labels
             continue
-    
+
     if not valid_bboxes:
         warnings.warn("No valid tick label extents — using fallback padding")
         pad = 5 / fig.dpi if fig.dpi > 0 else 0.02  # 5 pixels or 2% fallback
         valid_bboxes = [ax.get_position()]  # fallback
-    
+
     # Calculate pad safely
     try:
         min_y1 = min([i.y1 for i in valid_bboxes])
         min_y0 = min([i.y0 for i in valid_bboxes])
         pad = bbox.y0 - min_y1
-        
+
         # Validate pad
         if not np.isfinite(pad) or pad < 0:
             pad = 5 / fig.dpi if fig.dpi > 0 else 0.02
     except Exception:
         pad = 5 / fig.dpi if fig.dpi > 0 else 0.02
         min_y0 = bbox.y0 - 0.05  # fallback
-    
+
     # Create colorbar axes
-    cax = fig.add_axes([bbox.x0, min_y0 - globals.cax_width - pad, 
+    cax = fig.add_axes([bbox.x0, min_y0 - globals.cax_width - pad,
                         bbox.width, globals.cax_width])
     cbar = fig.colorbar(im, cax=cax, orientation='horizontal', extend=extend)
-    
+
     # Set label with full error handling
     try:
         fontsize = globals.fontsize_label
         if not np.isfinite(fontsize) or fontsize <= 0:
             fontsize = 10
             warnings.warn(f"Invalid globals.fontsize_label, using {fontsize}")
-        
+
         cax_pos = cax.get_position()
         label_width = fig.get_figwidth() * (cax_pos.x1 - cax_pos.x0) * fig.dpi
-        
+
         if not np.isfinite(label_width) or label_width <= 0:
             wrapped_label = label
         else:
@@ -1062,7 +1061,7 @@ def _make_cbar(fig,
                 wrapped_label = th.wrapped_text(fig, label, label_width, fontsize)
             else:
                 wrapped_label=label
-        
+
         cbar.set_label(wrapped_label, fontsize=fontsize)
     except Exception as e:
         warnings.warn(f"Failed to set colorbar label: {e}")
@@ -1070,11 +1069,11 @@ def _make_cbar(fig,
             cbar.set_label(label, fontsize=10)
         except Exception:
             pass  # Give up on label if even simple setting fails
-    
+
     cbar.outline.set_linewidth(0.6)
     cbar.outline.set_edgecolor('black')
     cbar.ax.tick_params(width=0.6, labelsize=default_fontsize)
-    
+
     return fig, im, cax
 
 
@@ -1180,14 +1179,14 @@ def capsizing(ax, orient="v", factor=globals.cap_factor, iterative=True, n_lines
         ax : matplotlib.axes object
             ax containing new lines of boxplot
         n_lines : int, optional
-            number of preexisting lines before drawing the boxplot. 
+            number of preexisting lines before drawing the boxplot.
             Only used when function called in loop.
         orient : str, optional
             which orientation does the boxplot have
         factor : float, optional
             factor of capwidth to boxwidth
         iterative : bool, optional
-            determines if function gets called in loop or should loop 
+            determines if function gets called in loop or should loop
             through boxplots by itself
     """
     if iterative:
@@ -1241,8 +1240,8 @@ def triangle_hatching(ax, box, dist=0.5, direction="up", zorder=-1, linewidth=1,
     """
     Draw triangular hatching inside a box patch using a LineCollection (fast).
 
-    This function overlays evenly spaced triangular lines across the bounding box 
-    of the given `box` patch. Triangles can point in four directions: 'up', 'down', 
+    This function overlays evenly spaced triangular lines across the bounding box
+    of the given `box` patch. Triangles can point in four directions: 'up', 'down',
     'left', or 'right'.
 
     Parameters
@@ -1361,12 +1360,12 @@ class HandlerHatch(HandlerTuple):
                            transform=trans)
 
         return [h, p]
-    
+
 def hatched_legend_entry(facecolor, direction="up", hatch_color="k", lw=globals.hatch_linewidth, zorder=-1):
     """
     Create a proxy legend handle: a colored rectangle with triangular hatching.
     The hatching is drawn inside the normalized legend box [0,1]x[0,1].
-    
+
     direction: "up", "down", "left", "right"
     """
     # Background rectangle
@@ -1418,7 +1417,7 @@ def boxplot(
     dpi : int, optional
         Resolution for raster graphic output. The default is globals.dpi.
     new_coloring : bool, optional
-        determines if hashed dataset combinations are used to derive a 
+        determines if hashed dataset combinations are used to derive a
         colorscheme, or classic blue, white, red is used
         'old' -> blue, white, red
         'new' -> hashed dataset combinations + hatching
@@ -1442,7 +1441,7 @@ def boxplot(
     axes = [axis]
     if axis is None:
         n_axes = ((len(unique_combos)-1)//globals.n_boxplots_in_row) + 1
-        if values["dataset"].nunique() > globals.bin_th: 
+        if values["dataset"].nunique() > globals.bin_th:
             dims = [
                 globals.boxplot_width_vertical*values["dataset"].nunique()/globals.bin_th \
                     if values["dataset"].nunique()<globals.n_boxplots_in_row \
@@ -1499,15 +1498,15 @@ def boxplot(
             if len(data["value"]) == int(data["value"].isna().sum()):
                 raise PlotterError(f"There are no valid measurements for this metric ({label}) "
                                 "therefore the creation of a plot is skipped.")
-            
-            cen = sns_custom_boxplot(data = data, 
+
+            cen = sns_custom_boxplot(data = data,
                             x = "label",
                             y = "value",
                             positions = [position],
                             color = color_cen,
                             showfliers=False,
                             widths=widths,
-                            ax=ax, 
+                            ax=ax,
                             orient="v",
                             dodge=True,
                             **kwargs)
@@ -1523,7 +1522,7 @@ def boxplot(
                                 color = c_lower,
                                 showfliers=False,
                                 widths=widths_ci,
-                                ax=ax, 
+                                ax=ax,
                                 orient="v",
                                 dodge=True,
                                 **kwargs)
@@ -1537,12 +1536,12 @@ def boxplot(
                                 color = c_upper,
                                 showfliers=False,
                                 widths=widths_ci,
-                                ax=ax, 
+                                ax=ax,
                                 orient="v",
                                 dodge=True,
-                                **kwargs)     
+                                **kwargs)
                 capsizing(up, n_lines=n_lines)
-                l_up.append(ax.patches[-1])               
+                l_up.append(ax.patches[-1])
 
         if label is not None:
             x, y = th.smart_suplabel(fig, axis="y")
@@ -1552,7 +1551,7 @@ def boxplot(
         if ci and new_coloring:
             dist = (ax.get_ylim()[1]-ax.get_ylim()[0])/globals.num_hatches
             for low in l_low:
-                triangle_hatching(ax, low, dist=dist, direction="down", color=low.get_facecolor()[:3], linewidth=globals.hatch_linewidth) 
+                triangle_hatching(ax, low, dist=dist, direction="down", color=low.get_facecolor()[:3], linewidth=globals.hatch_linewidth)
                 low.set_facecolor(low.get_facecolor()[:3]+(globals.ci_alpha,))
             for up in l_up:
                 triangle_hatching(ax, up, dist=dist, direction="up", color=up.get_facecolor()[:3], linewidth=globals.hatch_linewidth)
@@ -2013,7 +2012,7 @@ def aggregate_subplots(to_plot: dict, funct, **kwargs):
     sub_n = len(to_plot.keys())
     if "n_bins" not in kwargs.keys():
         kwargs["n_bins"] = 1
-    if kwargs["n_bins"]*len(to_plot[list(to_plot.keys())[0]].columns) > globals.aggregated_max_boxes:
+    if len(set(to_plot[list(to_plot.keys())[0]].columns)) > globals.aggregated_max_boxes:
         raise PlotterError(
             f"There are too many boxes (categories * dataset_combinations: {len(to_plot)}*{len(to_plot[list(to_plot.keys())[0]].columns)} " \
             f"= {len(to_plot)*len(to_plot[list(to_plot.keys())[0]].columns)}). A maximum of {globals.aggregated_max_boxes} boxes " \
@@ -2027,6 +2026,7 @@ def aggregate_subplots(to_plot: dict, funct, **kwargs):
             UserWarning
         )
         return None, None
+
     if sub_n == 1:
         for n, (bin_label, data) in enumerate(to_plot.items()):
             # fig = plt.figure()
@@ -2055,7 +2055,7 @@ def aggregate_subplots(to_plot: dict, funct, **kwargs):
                 ax.legend([], [], frameon=False, fontsize=globals.fontsize_legend)
         fig.set_figheight(globals.boxplot_height_vertical*n_rows)
         fig.set_figwidth(globals.boxplot_width_vertical*n_col)
-    
+
     return fig, np.array(fig.axes)
 
 
@@ -2139,7 +2139,7 @@ def bplot_catplot(to_plot,
         if len(set(to_plot[metadata_name])) > globals.orient_th:
             orient = "h"
         if orient == "h":
-            if n_meta > globals.meta_bin_th: 
+            if n_meta > globals.meta_bin_th:
                 dims = [
                     globals.boxplot_width_horizontal,
                     globals.boxplot_height_horizontal*n_meta/globals.meta_bin_th
@@ -2157,7 +2157,7 @@ def bplot_catplot(to_plot,
 
         fig = plt.figure(figsize = (dims[0], dims[1]))
         axis = fig.add_axes([globals.ax_left, globals.ax_bottom, globals.ax_width, globals.ax_height])
-        
+
     if orient == "v":
         x = metadata_name
         y = "values"
@@ -2167,16 +2167,13 @@ def bplot_catplot(to_plot,
 
         # add N points to the axis labels
     to_plot = add_cat_info(to_plot, metadata_name=metadata_name).sort_values("Dataset", ascending=True)
-    
+
     if not 'widths' in kwargs:
         # Automatically size boxplot width to number of Datasetcombinations
         widths = 0.8/to_plot.Dataset.nunique()
 
     unique_combos = to_plot.set_index(np.arange(to_plot.index.size))["Dataset"].unique()
     palette = get_palette_for(unique_combos)
-    if len(to_plot["values"]) == int(to_plot["values"].isna().sum()):
-        raise PlotterError(f"There are no valid measurements for this metric ({axis_name}) metadata ({metadata_name}) combination "
-                         "therefore the creation of a plot is skipped.")
 
     box = sns_custom_boxplot(
         x=x,
@@ -2264,7 +2261,11 @@ def bplot_catplot(to_plot,
     axis.set_axisbelow(True)
     axis.spines['right'].set_visible(False)
     axis.spines['top'].set_visible(False)
-    axis.legend(loc=th.best_legend_pos_exclude_list(axis), 
+    handles, labels = axis.get_legend_handles_labels() #to deal with duplicate legend entries
+    by_label = dict(zip(labels, handles))
+    axis.legend(by_label.values(), 
+                by_label.keys(),
+                loc=th.best_legend_pos_exclude_list(axis), 
                 fontsize=globals.fontsize_legend, 
                 ncol=(len(axis.get_legend_handles_labels()[0])-1)//5 + 1)
 
@@ -2514,7 +2515,7 @@ def mapplot(
                         zorder=5,
                         transform=globals.data_crs,
                         label="Values computed")
-        im_nan = ax.scatter(df_na.index.get_level_values(lon), 
+        im_nan = ax.scatter(df_na.index.get_level_values(lon),
                             df_na.index.get_level_values(lat),
                             c="k",
                             marker=".",
@@ -2563,7 +2564,7 @@ def mapplot(
     if ref_short in globals.scattered_datasets:
         if len(df) < 400: # For a high amount of points the minimum markersize is kept
             s = non_overlapping_markersize(ax, im)
-            im.set_sizes([s])   
+            im.set_sizes([s])
 
     if add_cbar:  # colorbar
         fig, im, cax = _make_cbar(fig,
@@ -2575,10 +2576,10 @@ def mapplot(
                              diff_map=diff_map,
                              scl_short=scl_short)
 
-    #if legend wasn't created yet creat one  
+    #if legend wasn't created yet creat one
     if (ax.get_legend() is None) and (ref_short in globals.scattered_datasets):
         ax.legend(borderpad = 0.6)
-        
+
     return fig, ax
 
 def plot_spatial_extent(

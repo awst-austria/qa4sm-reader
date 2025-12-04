@@ -201,7 +201,7 @@ def append_legend_title(fig, ax, Var) -> tuple:
 
     return fig, ax
 
-def smart_suptitle(fig, pad=globals.fontsize_title/2):
+def smart_suptitle(fig, pad=globals.fontsize_title/1.5):
     """
     Compute position of Suptitle centeredd above axes.
 
