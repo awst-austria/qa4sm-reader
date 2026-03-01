@@ -165,7 +165,7 @@ def get_legend_title(Var) -> str:
     legend_title = "Datasets:\n" + "\n".join(f"{k}: {v}" for k, v in (d).items())
     return legend_title
 
-def append_legend_title(fig, ax, Var) -> tuple:
+def append_legend_title(fig, ax, Var, loc=None) -> tuple:
     """
     Appends a title to an existing legend from a QA4SMMetricVariable.
 
@@ -177,6 +177,10 @@ def append_legend_title(fig, ax, Var) -> tuple:
         The subplot axis containing the legend to modify.
     Var : QA4SMMetricVariable
         Variable object used to construct the legend title.
+    loc: str, optional: default=None
+        String that determines placement of legend, if 'None' 
+        gets moved to least overlapping position according to 
+        'best_legend_pos_exclude_list'.
 
     Returns
     -------
@@ -184,7 +188,11 @@ def append_legend_title(fig, ax, Var) -> tuple:
         The same figure and axis, with the legend title updated.
     """  
     legend = ax.get_legend()
-    legend_title = get_legend_title(Var)
+    if len(legend.get_title().get_text())>0:
+        # Appends preexisting title if there is one
+        legend_title = legend.get_title().get_text()+"\n"+get_legend_title(Var)
+    else:
+        legend_title = get_legend_title(Var)
 
     # Change Size to same as rest of legend
     if len(legend.legend_handles) == 0:
@@ -192,13 +200,12 @@ def append_legend_title(fig, ax, Var) -> tuple:
     else:
         fs = legend.get_texts()[0].get_fontsize()
         legend.set_title(legend_title, prop={'size': fs})
-
     legend._legend_box.align = "left"
-    best_loc_with_title = best_legend_pos_exclude_list(ax)
-
-    # Step 4: move legend to new best position
-    legend.set_loc(best_loc_with_title)
-
+    if not loc:
+        best_loc_with_title = best_legend_pos_exclude_list(ax)
+        legend.set_loc(best_loc_with_title)
+    else:
+        legend.set_loc(loc)
     return fig, ax
 
 def smart_suptitle(fig, pad=globals.fontsize_title/1.5):
