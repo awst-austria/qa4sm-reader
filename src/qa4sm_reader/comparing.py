@@ -563,7 +563,7 @@ class QA4SMComparison:
             medians = self._get_pairwise(metric).median()
             # a bit of a hack here
             table[description] = [
-                medians[0], medians[1], medians[0] - medians[1]
+                medians.iloc[0], medians.iloc[1], medians.iloc[0] - medians.iloc[1]
             ]
         columns = self.validation_names
         columns.append("Difference of the medians (0 - 1)")
@@ -573,7 +573,7 @@ class QA4SMComparison:
             columns=columns,
         )
 
-        table = table.applymap(plm._format_floats)
+        table = table.map(plm._format_floats)
 
         return table
 
