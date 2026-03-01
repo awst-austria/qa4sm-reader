@@ -502,7 +502,7 @@ class ConfidenceInterval(QA4SMVariable, MixinVarmeta):
         self.bound = self.parts["bound"]
 
 
-class Metadata(QA4SMVariable):
+class Metadata(QA4SMVariable, MixinVarmeta):
     """Class for a MetricVariable representing metadata (only with ISMN as reference)"""
 
     def __init__(self, varname, global_attrs, values=None):

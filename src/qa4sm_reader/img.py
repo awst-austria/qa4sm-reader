@@ -26,6 +26,7 @@ class QA4SMImg(object):
                  index_names=globals.index_names,
                  load_data=True,
                  empty=False,
+                 val_type="temporal",
                  engine='h5netcdf'):
         """
         Initialise a common QA4SM results image.
@@ -48,6 +49,9 @@ class QA4SMImg(object):
             Names of dimension variables in x and y direction (lat, lon).
         load_data: bool, default is True
             if true, initialise all the datasets, variables and metadata
+        val_type : str, optional (default: 'temporal')
+            String that determines the type of validation to be visualized.
+            'temporal' or 'spatial'
         engine: str, optional (default: h5netcdf)
             Engine used by xarray to read data from file.
         """
@@ -59,10 +63,19 @@ class QA4SMImg(object):
         self.extent = self._get_extent(
             extent=extent)  # get extent from .nc file if not specified
         self.datasets = hdl.QA4SMDatasets(self.ds.attrs)
-
+        self.val_type = val_type
+        self.df_dict = None
+        self.df_gpi = None
+        self.df = None
+        
         if load_data:
             self.varnames = list(self.ds.variables.keys())
-            self.df = self._ds2df()
+            if self.val_type == "temporal":
+                self.df = self._ds2df()
+            elif self.val_type== "spatial":
+                self.df_dict = self._ds2df()
+                self.df_gpi = self.df_dict["gpi"]
+                self.df = self.df_dict["date_time"]
             self.vars = self._load_vars(empty=empty)
             self.metrics = self._load_metrics()
             self.common, self.double, self.triple = self.group_metrics(metrics)
@@ -374,32 +387,41 @@ class QA4SMImg(object):
         df : pd.DataFrame
             DataFrame with Var name as column names
         """
-        try:
-            if varnames is None:
-                if globals.time_name in self.varnames:
-                    if self.ds[globals.time_name].values.size == 0:
-                        self.ds = self.ds.drop_vars(globals.time_name)
-                df = self.ds.to_dataframe()
-            else:
-                df = self.ds[self.index_names + varnames].to_dataframe()
-                df.dropna(axis='index', subset=varnames, inplace=True)
-        except KeyError as e:
-            raise Exception(
-                "The variable name '{}' does not match any name in the input values."
-                .format(e.args[0]))
+        if self.val_type=="temporal":
+            try:
+                if varnames is None:   
+                    if globals.time_name in self.varnames:
+                        if self.ds[globals.time_name].values.size == 0:
+                            self.ds = self.ds.drop_vars(globals.time_name)
+                    df = self.ds.to_dataframe()
+                else:
+                    df = self.ds[self.index_names + varnames].to_dataframe()
+                    df.dropna(axis='index', subset=varnames, inplace=True)
+            except KeyError as e:
+                raise Exception(
+                    "The variable name '{}' does not match any name in the input values."
+                    .format(e.args[0]))
+            if isinstance(df.index, pd.MultiIndex):
+                lat, lon, gpi = globals.index_names
+                df[lat] = df.index.get_level_values(lat)
+                df[lon] = df.index.get_level_values(lon)
 
-        if isinstance(df.index, pd.MultiIndex):
-            lat, lon, gpi = globals.index_names
-            df[lat] = df.index.get_level_values(lat)
-            df[lon] = df.index.get_level_values(lon)
+                if gpi in df.index:
+                    df[gpi] = df.index.get_level_values(gpi)
 
-            if gpi in df.index:
-                df[gpi] = df.index.get_level_values(gpi)
+            df.reset_index(drop=True, inplace=True)
+            df = df.set_index(self.index_names)
+            return df
 
-        df.reset_index(drop=True, inplace=True)
-        df = df.set_index(self.index_names)
-
-        return df
+        if self.val_type == "spatial":
+            df_dict = {dim: self.ds[[v for v in self.ds.data_vars if dim in self.ds[v].dims]].to_dataframe() 
+                            for dim in self.ds.dims 
+                            if any(dim in self.ds[v].dims for v in self.ds.data_vars)}
+            if "gpi" in df_dict.keys():
+                df_dict["gpi"]["gpi"] = df_dict["gpi"].index
+                df_dict["gpi"].reset_index(drop=True, inplace=True)
+                df_dict["gpi"] = df_dict["gpi"].set_index(self.index_names)
+            return df_dict
 
     def metric_df(self, metrics: Union[str, list]) -> pd.DataFrame:
         """
