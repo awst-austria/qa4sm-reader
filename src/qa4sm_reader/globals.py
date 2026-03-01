@@ -489,7 +489,6 @@ COMMON_METRICS = {
     'mse_corr': 'Mean square error correlation',
     'mse_bias': 'Mean square error bias',
     'mse_var': 'Mean square error variance',
-    'n_gpi_was_used': '# of times gpi was used for calculation',
 }
 
 TC_METRICS = {

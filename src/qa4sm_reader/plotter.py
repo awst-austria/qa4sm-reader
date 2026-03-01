@@ -1632,7 +1632,7 @@ class QA4SMPlotter:
                 ref_grid_stepsize=None,
                 plot_extent=
                 None,  # if None, extent is automatically adjusted (as opposed to img.extent)
-                label="# of times gpi was used for calculation", 
+                label="# of times gpi was used for calculation", # 2026-03-01 until now only this metric relevant, if that changes probably changes to globals necessary
                 scl_short=None,
                 is_scattered=is_scattered,
                 **style_kwargs)
