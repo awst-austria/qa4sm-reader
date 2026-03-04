@@ -814,7 +814,7 @@ class QA4SMPlotter:
         if scl_meta:
             scl_short = scl_meta[1]['short_name']
 
-        is_scattered = Var.attrs.get('val_is_scattered_data') == 'True'
+        is_scattered = True if (Var.attrs.get('val_is_scattered_data') == True) else False
         # create mapplot
         fig, ax = plm.mapplot(
             df=Var.values[Var.varname],
