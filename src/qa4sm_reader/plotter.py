@@ -644,9 +644,9 @@ class QA4SMPlotter:
             ref_ds, metric_ds, other_ds, _, _ = Var.get_varmeta()
             if var_ci is not None:
                 if id in ci.keys():
-                    ci[id][f"{ref_ds[0]} & {other_ds[0]}"]=var_ci
+                    ci[id][f"Other Data: {ref_ds[0]} & {other_ds[0]}"]=var_ci
                 else:
-                    ci[id] = {f"{ref_ds[0]} & {other_ds[0]}":var_ci}
+                    ci[id] = {f"Other Data: {ref_ds[0]} & {other_ds[0]}":var_ci}
             if id in metric_tc.keys():
                 metric_tc[id][0].append(df)
             else:
