@@ -289,10 +289,10 @@ def smart_suplabel(fig, axis, pad=globals.fontsize_label/2):
                 left_positions.append(min(b.x0 for b in all_bboxes_fig))
 
         if left_positions:
-            x = min(left_positions) - globals.fontsize_label/(72*fig.get_figwidth()) - pad/(72*fig.get_figheight()) 
+            x = min(left_positions) - globals.fontsize_label/(72*fig.get_figwidth()) - pad/(72*fig.get_figwidth()) 
         else:
             x = 0.01  # fallback
-        y = np.mean([(ax.get_position().y0+ax.get_position().y1)/2 for ax in fig.get_axes()[::globals.n_col_agg]])
+        y = np.mean(list(set([(ax.get_position().y0+ax.get_position().y1)/2 for ax in fig.get_axes()])))
         return x, y
     else: #fallback
         return 0.01, 0.01

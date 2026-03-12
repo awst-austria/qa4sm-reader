@@ -29,6 +29,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcol
 import matplotlib.ticker as mticker
 import matplotlib.gridspec as gridspec
+import matplotlib.dates as mdates
 import matplotlib.patheffects as path_effects
 from matplotlib.collections import LineCollection
 from matplotlib.legend_handler import HandlerLineCollection, HandlerTuple
@@ -2464,28 +2465,43 @@ def timeplot(
     for i in range(len(df.columns)):
         y_low = 1-(i+1)*(globals.ts_pad+globals.ts_axh)/fh
         axes.append(fig.add_axes([globals.ts_pad/fw, y_low, globals.ts_axw/fw, globals.ts_axh/fh]))
+
     for i, col in enumerate(df.columns):
         ax = axes[i]
         unique_color = get_color_for(col)
+        
+        # Variant with markers
+        # ax.scatter(df.index, 
+        #                 df[col], 
+        #                 color=unique_color, 
+        #                 label=col, 
+        #                 marker="o",
+        #                 s=10*globals.ts_linewidth,
+        #                 edgecolors="k",
+        #                 linewidths=1/4*globals.boxplot_edgewidth,
+        #                 zorder=2,
+        #                 alpha=0.6)
+        
+        # Variant with line
+        line, = ax.plot(df.index, 
+                        df[col], 
+                        color="k", 
+                        label=col, 
+                        linewidth=globals.boxplot_edgewidth/2,
+                        linestyle="-",
+                        marker="o",
+                        markersize=3*globals.ts_linewidth,
+                        markeredgecolor="k",
+                        markerfacecolor=unique_color,
+                        markeredgewidth=globals.boxplot_edgewidth/2,
+                        alpha=1)
         
         # line, = ax.plot(df.index, 
         #                 df[col], 
         #                 color=unique_color, 
         #                 label=col, 
-        #                 linewidth=globals.ts_linewidth,
-        #                 linestyle="--",
-        #                 marker="o",
-        #                 markersize=3*globals.ts_linewidth,
-        #                 markeredgecolor="k",
-        #                 markerfacecolor=unique_color,
-        #                 markeredgewidth=globals.boxplot_edgewidth)
-        
-        line, = ax.plot(df.index, 
-                        df[col], 
-                        color=unique_color, 
-                        label=col, 
-                        linewidth=globals.ts_linewidth)
-        line.set_path_effects([path_effects.withStroke(linewidth=globals.ts_linewidth+2*globals.boxplot_edgewidth, foreground="k"),path_effects.Normal()])
+        #                 linewidth=globals.ts_linewidth)
+        # line.set_path_effects([path_effects.withStroke(linewidth=globals.ts_linewidth+2*globals.boxplot_edgewidth, foreground="k"),path_effects.Normal()])
 
         # CI
         if ci:
@@ -2493,7 +2509,8 @@ def timeplot(
                                       facecolor=unique_color, 
                                       edgecolor=None, 
                                       linewidth=0.8, 
-                                      label="Confidence\nInterval")
+                                      label="Confidence\nInterval",
+                                      zorder=0)
             ci_fill.set_facecolor(np.append(ci_fill.get_facecolor()[0][:3], globals.ci_alpha))
 
         # styling
@@ -2575,22 +2592,29 @@ def timeplot_status(
         
         df_status = _replace_status_values(df[col])
         vals = sorted(list(set(df_status.values)))
-        for date in df.index:
-            ax.axvline(date, 
-                            color=status_dict[df[col][date]]["color"], 
-                            label=status_dict[df[col][date]]["name"], 
-                            linewidth=globals.ts_linewidth)
+
+        x_values = mdates.date2num(df.index)
+        segments = [[(x, 0), (x, 1)] for x in x_values]
+        colors = [status_dict[df[col][date]]["color"] for date in df.index]
+        line_coll = LineCollection(segments, 
+                                   colors=colors, 
+                                   transform=ax.get_xaxis_transform(), 
+                                   linewidths=globals.ts_linewidth, 
+                                   zorder=0)
+        ax.add_collection(line_coll)
 
         # styling
         ## limits
-        ax.set_xlim(df.index.min(), df.index.max())
+        ax.set_xlim(x_values.min(), x_values.max())
+        ax.set_ylim(0,1)
         ## grid
-        ax.grid(which='major', axis="x", color='gray', linestyle='dotted', linewidth=0.8)
+        ax.grid(which='major', axis="x", color='gray', linestyle='dotted', linewidth=0.8, zorder=5)
 
         ## spines
         ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
         ax.tick_params(left=False, labelleft=False)
+        ax.xaxis_date()
         if i==0:
             ax.tick_params(bottom=False, labelbottom=False, top=True, labeltop=True)
         elif i not in [0, len(df.columns)-1]:
@@ -2602,7 +2626,7 @@ def timeplot_status(
         leg = ax.legend(handles=handles, 
                         loc="upper left", 
                         fontsize=globals.fontsize_legend, 
-                        title='TC-Metrics\n'+col.replace('\n', " ") if 'Other Data' in col else col, 
+                        title='TC-Metrics\n'+col.replace('\n', " ") if (len(col)>5) else col, 
                         title_fontsize=globals.fontsize_legend)
         leg._legend_box.align = "left"
 

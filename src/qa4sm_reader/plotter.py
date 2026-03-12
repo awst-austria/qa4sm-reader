@@ -162,13 +162,13 @@ class QA4SMPlotter:
 
         parts = []
         ref, mds, other, _, sref = Var.get_varmeta()
-
-        if type in ['boxplot_tc', 'mapplot_basic', 'timeplot_meta']:
-            d = th.get_dataset_dict(Var) # Appends version number to pretty name if needed
+        d = th.get_dataset_dict(Var) # Appends version number to pretty name if needed
+        if type in ['mapplot_basic', 'timeplot_meta']:
             parts.extend([d[mds[0]]])
             parts.extend([d[ref[0]]])
+        elif type in ['boxplot_tc', 'timeplot_tc', 'boxplot_tc_spatial']:
+            parts.extend([d[mds[0]]])
         elif type == 'mapplot_tc':
-            d = th.get_dataset_dict(Var) # Appends version number to pretty name if needed
             parts.extend([d[mds[0]]])
             for dss in Var.other_dss:
                 parts.extend([d[dss[0]]])
@@ -188,16 +188,20 @@ class QA4SMPlotter:
         titles = {
             'boxplot_basic':
             'Intercomparison of {}',
+            'boxplot_spatial': 'Intercomparison of spatial {}',
             'barplot_basic': 'Validation Errors',
             'mapplot_status': 'Validation Errors',
             'boxplot_tc':
-            'Intercomparison of {} for {} with {}',
+            'Intercomparison of {} for {}',
+            'boxplot_tc_spatial':
+            'Intercomparison of spatial {} for {}',
             'mapplot_basic':
             '{} for {} with {}',
             'mapplot_tc': '{} for {} with {} and {}',
             'metadata':
             'Intercomparison of {} by {}',
             'timeplot_basic':'Temporal variability of spatial {}',
+            'timeplot_tc': 'Temporal variability of spatial {} for {}',
             'timeplot_bar': 'Validation Errors between {} and {}',
             'timeplot_bar_tc': 'Validation Errors between {} and {} and {}',
             'timeplot_status': 'Validation Errors'
@@ -222,14 +226,17 @@ class QA4SMPlotter:
         # we stick to old naming convention
         names = {
             'boxplot_basic': 'boxplot_{}',
+            'boxplot_spatial': 'boxplot_spatial_{}',
             'barplot_basic': 'barplot_status',
             'mapplot_status': 'overview_status',
             'mapplot_common': 'overview_{}',
             'boxplot_tc': 'boxplot_{}_for_{}-{}',
+            'boxplot_tc_spatial': 'boxplot_spatial_{}_for_{}-{}',
             'mapplot_double': 'overview_{}-{}_and_{}-{}_{}',
             'mapplot_tc': 'overview_{}-{}_and_{}-{}_and_{}-{}_{}_for_{}-{}',
             'metadata': 'boxplot_{}_metadata_{}',
             'timeplot_basic': 'tsplot_{}',
+            'timeplot_tc': 'tsplot_{}_for_{}-{}',
             'table': 'statistics_table',
             'timeplot_meta': 'overview_{}-{}_and_{}-{}_{}',
             'timeplot_meta_tc': 'overview_{}-{}_and_{}-{}_and_{}-{}_{}',
@@ -530,6 +537,7 @@ class QA4SMPlotter:
                       out_name: str = None,
                       out_types: Optional[Union[List[str], str]] = 'png',
                       save_files: bool = False,
+                      val_type: str = "temporal",
                       **plotting_kwargs) -> Union[list, None]:
         """
         Creates a boxplot for common and double metrics. Saves a figure and
@@ -546,6 +554,9 @@ class QA4SMPlotter:
             extensions which the files should be saved in. Default is 'png'
         save_files: bool, optional. Default is False
             wether to save the file in the output directory
+        val_type: str, optional, Default is 'temporal'
+            'temporal' creates graphs for temporal validation
+            'spatial' creates graphs for spatial validation
         plotting_kwargs: arguments for _boxplot_definition function
 
         Returns
@@ -565,20 +576,23 @@ class QA4SMPlotter:
             return None
         # put all Variables in the same dataframe
         values = pd.concat(values, axis=1)
-        values = values.reset_index().melt(id_vars = ["lat", "lon", "gpi"], var_name = "label", value_name="value").sort_values("label")
+        if val_type in ["temporal"]:
+            values = values.reset_index().melt(id_vars = ["lat", "lon", "gpi"], var_name = "label", value_name="value").sort_values("label")
+        elif val_type in ["spatial"]:
+            values = values.reset_index().melt(id_vars = "date_time", var_name = "label", value_name="value").sort_values("label")
         values["dataset"] = [values["label"][i].split("\n")[0].replace("Datasets: ", "") for i in values.index]
 
         # create plot
         fig, ax = self._boxplot_definition(metric=metric,
                                            df=values,
-                                           type='boxplot_basic',
+                                           type='boxplot_basic' if val_type in ["temporal"] else 'boxplot_spatial',
                                            period=period,
                                            ci=ci,
                                            Var=Var,
                                            **plotting_kwargs)
         if not out_name:
             out_name = self.create_filename(Var,
-                                            type='boxplot_basic',
+                                            type='boxplot_basic' if val_type in ["temporal"] else 'boxplot_spatial',
                                             period=period)
         # save or return plotting objects
         if save_files:
@@ -596,6 +610,7 @@ class QA4SMPlotter:
                    out_name: str = None,
                    out_types: Optional[Union[List[str], str]] = 'png',
                    save_files: bool = False,
+                   val_type: str = "temporal",
                    **plotting_kwargs) -> list:
         """
         Creates a boxplot for TC metrics. Saves a figure and returns Matplotlib fig and ax objects for
@@ -612,6 +627,8 @@ class QA4SMPlotter:
             extensions which the files should be saved in. Default is 'png'
         save_files: bool, optional. Default is False
             wether to save the file in the output directory
+        val_type: str, optional, Default is 'temporal'
+
         plotting_kwargs: arguments for _boxplot_definition function
 
         Returns
@@ -626,11 +643,10 @@ class QA4SMPlotter:
             id = Var.metric_ds[0]
             ref_ds, metric_ds, other_ds, _, _ = Var.get_varmeta()
             if var_ci is not None:
-                # var_ci["dataset"] = [f"{ref_ds[0]} & {other_ds[0]}" for i in range(len(var_ci))]
                 if id in ci.keys():
-                    ci[id][f"{ref_ds[0]} & {other_ds[0]}"]=var_ci
+                    ci[id][f"Other Data: {ref_ds[0]} & {other_ds[0]}"]=var_ci
                 else:
-                    ci[id] = {f"{ref_ds[0]} & {other_ds[0]}":var_ci}
+                    ci[id] = {f"Other Data: {ref_ds[0]} & {other_ds[0]}":var_ci}
             if id in metric_tc.keys():
                 metric_tc[id][0].append(df)
             else:
@@ -639,9 +655,12 @@ class QA4SMPlotter:
         for id, values in metric_tc.items():
             dfs, Var = values
             df = pd.concat(dfs)
-            df = df.reset_index().melt(id_vars = ["lat", "lon", "gpi"], var_name = "label", value_name="value").sort_values("label")
-            # df["dataset"] = f"{Var.ref_ds[0]} & {Var.metric_ds[0]}"
-            df["dataset"] = [df["label"][i].split("\n")[1].replace("Datasets: ", "") for i in df.index]
+            if val_type in ["temporal"]:
+                df = df.reset_index().melt(id_vars = ["lat", "lon", "gpi"], var_name = "label", value_name="value").sort_values("label")
+            elif val_type in ["spatial"]:
+                df = df.reset_index().melt(id_vars = "date_time", var_name = "label", value_name="value").sort_values("label")
+        # df["dataset"] = f"{Var.ref_ds[0]} & {Var.metric_ds[0]}"
+            df["dataset"] = [df["label"][i].split("\n")[0]+df["label"][i].split("\n")[1].replace("Datasets: ", " ") for i in df.index]
             # Because the plots have to be generated in comparions with each pair of other data in tc so ifthere are 5 datasets i calculate the tc for 1 with 0-2, 0-3, 0-4
             # values are all Nan or NaNf - not plotted
             if np.isnan(df["value"].to_numpy()).all():
@@ -655,14 +674,14 @@ class QA4SMPlotter:
             fig, ax = self._boxplot_definition(metric=metric,
                                                df=df,
                                                ci=ci_id,
-                                               type='boxplot_tc',
+                                               type='boxplot_tc' if val_type in ["temporal"] else 'boxplot_tc_spatial',
                                                period=period,
                                                Var=Var,
                                                **plotting_kwargs)
             # save. Below workaround to avoid same names
             if not out_name:
                 save_name = self.create_filename(Var,
-                                                 type='boxplot_tc',
+                                                 type='boxplot_tc' if val_type in ["temporal"] else 'boxplot_tc_spatial',
                                                  period=period)
             else:
                 save_name = out_name
@@ -1053,6 +1072,86 @@ class QA4SMPlotter:
 
         else:
             return fig, ax
+        
+    def timeplot_tc(self,
+                       metric: str,
+                       period: str = None,
+                       out_types: Optional[Union[List[str], str]] = 'png',
+                       save_files: bool = False,
+                       out_name: str = None,
+                       **plotting_kwargs) -> list:
+        """
+        Timeseries plot for all variables for a given tcol metric in the loaded file.
+
+        Parameters
+        ----------
+        metric : str
+            Name of a metric. File is searched for variables for that metric.
+        out_types: str or list of str, Optional
+            extensions which the files should be saved in. Default is 'png'
+        save_files: bool, optional. Default is False
+            wether to save the file in the output directory
+        out_name: str
+            name of output file
+        plotting_kwargs: arguments for timeseries plotting function
+
+        Returns
+        -------
+        fnames : list
+            List of files that were created
+        """
+        fnames = []
+        # group Vars and CIs relative to the same dataset
+        metric_tc, ci = {}, {}
+
+        for df, Var, var_ci in self._yield_values(metric=metric, tc=True):
+            id = Var.metric_ds[0]
+            ref_ds, metric_ds, other_ds, _, _ = Var.get_varmeta()
+            if var_ci is not None:
+                if id in ci.keys():
+                    ci[id][f"{ref_ds[0]} & {other_ds[0]}"]=var_ci
+                else:
+                    ci[id] = {f"{ref_ds[0]} & {other_ds[0]}":var_ci}
+            if id in metric_tc.keys():
+                metric_tc[id][0].append(df)
+            else:
+                metric_tc[id] = [df], Var
+
+        for id, values in metric_tc.items():
+            dfs, Var = values
+            df = pd.concat(dfs, axis=1)
+            df.columns = [col.split("\n")[0] + col.split("\n")[1].replace("Datasets: ", " ") for col in df.columns]
+
+            if np.isnan(df.iloc[:,0].to_numpy()).all():
+                continue
+            # necessary if statement to prevent key error when no CIs are in the netCDF
+            if ci:
+                ci_id = ci[id]
+            else:
+                ci_id = None
+
+                    # create plot
+            fig, ax = self._timeplot_definition(metric=metric,
+                                            df=df,
+                                            type='timeplot_tc',
+                                            period=period,
+                                            ci=ci_id,
+                                            Var=Var,
+                                            **plotting_kwargs)
+            out_name = self.create_filename(Var,
+                                            type='timeplot_tc',
+                                            period=period)
+            # save or return plotting objects
+            if save_files:
+                fnames.extend(self._save_plot(out_name, out_types=out_types))
+                plt.close('all')
+
+        if save_files:
+            return fnames
+        else:
+            return fig, ax
+        
+
 
     def timeplot_status(self,
                        metric: str,
@@ -1089,7 +1188,7 @@ class QA4SMPlotter:
             if Var.g == 'pairwise':
                 values.append(Var.values.rename(columns={Var.values.columns[0]:self._box_caption(Var, tc=False, short_caption=True)}))
             if Var.g == 'triple':
-                values.append(Var.values.rename(columns={Var.values.columns[0]:self._box_caption(Var, tc=True, short_caption=True)}))
+                values.append(Var.values.rename(columns={Var.values.columns[0]:f"for {Var.ref_ds[0]}, {Var.metric_ds[0]} & {Var.other_ds[0]}"}))
         values = pd.concat(values, axis=1)
 
         fig, ax = self._timeplot_definition(metric=metric,
@@ -1196,14 +1295,27 @@ class QA4SMPlotter:
                                                 out_types=out_types,
                                                 save_files=save_all,
                                                 **plotting_kwargs)
-            elif Metric.g == 'triple':
-                # 2026-02-26: Maybe still changes necessary depending on how tests go     
-                fnames_mapplot = self.timeplot_metric(metric=metric,
+                
+                fnames_bplot = self.boxplot_basic(metric=metric,
+                                                period=period,
+                                                out_types=out_types,
+                                                save_files=save_all,
+                                                val_type="spatial",
+                                                **plotting_kwargs)
+                fnames_tsplot.extend(fnames_bplot)
+            elif Metric.g == 'triple':  
+                fnames_tsplot = self.timeplot_tc(metric=metric,
                                                 period=period,
                                                 out_types=out_types,
                                                 save_files=save_all,
                                                 **plotting_kwargs)
-                # self.timeplot_tc implementieren (sollt nur Änderung der aufgerufenen Spaltennamen und Titel sein, aber vielleicht komplizierter mit legenden und so)
+                fnames_bplot = self.boxplot_tc(metric=metric,
+                                            period=period,
+                                            out_types=out_types,
+                                            save_files=save_all,
+                                            val_type="spatial",
+                                            **plotting_kwargs)
+                fnames_tsplot.extend(fnames_bplot)
 
             return fnames_tsplot, fnames_mapplot
 
