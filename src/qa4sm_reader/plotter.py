@@ -955,7 +955,10 @@ class QA4SMPlotter:
             th.set_wrapped_title(fig, ax[0], title)
 
         # Legendentries for Datasets
-        fig, ax[0] = th.append_legend_title(fig, ax[0], Var, loc="upper left")
+        fig, ax[0] = th.append_legend_title(fig, 
+                                            ax[0], 
+                                            Var, 
+                                            loc=th.best_legend_pos_exclude_list(ax[0], forbidden_locs=globals.leg_loc_forbidden+[globals.leg_loc_dict["upper right"]]))
 
         if globals.draw_logo:
             plm.add_logo_to_figure(fig=fig)
@@ -1232,8 +1235,8 @@ class QA4SMPlotter:
             all plotted images are saved to the output directory
         plotting_kwargs: arguments for mapplot function.
         """
-        fnames_bplot = None
-        fnames_tsplot = None
+        fnames_bplot = []
+        fnames_tsplot = []
         Metric = self.img.metrics[metric]
 
         fnames_mapplot = None
@@ -1263,6 +1266,8 @@ class QA4SMPlotter:
                                                     out_types=out_types,
                                                     save_files=save_all,
                                                     **plotting_kwargs)
+            if fnames_bplot==[]:
+                fnames__bplot=None
             return fnames_bplot, fnames_mapplot
         
         if self.img.val_type in ["spatial"]:
@@ -1302,7 +1307,10 @@ class QA4SMPlotter:
                                                 save_files=save_all,
                                                 val_type="spatial",
                                                 **plotting_kwargs)
-                fnames_tsplot.extend(fnames_bplot)
+                if fnames_tsplot == None:
+                    fnames_tsplot = []
+                if fnames_bplot:
+                    fnames_tsplot.extend(fnames_bplot)
             elif Metric.g == 'triple':  
                 fnames_tsplot = self.timeplot_tc(metric=metric,
                                                 period=period,
@@ -1315,8 +1323,12 @@ class QA4SMPlotter:
                                             save_files=save_all,
                                             val_type="spatial",
                                             **plotting_kwargs)
-                fnames_tsplot.extend(fnames_bplot)
-
+                if fnames_tsplot == None:
+                    fnames_tsplot = []
+                if fnames_bplot:
+                    fnames_tsplot.extend(fnames_bplot)
+            if fnames_tsplot==[]:
+                fnames__tsplot=None
             return fnames_tsplot, fnames_mapplot
 
     def meta_single(self,
