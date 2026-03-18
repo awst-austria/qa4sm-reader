@@ -465,7 +465,7 @@ def custom_mapplot(
         if not plot_extent:
             plot_extent = get_plot_extent(df)
 
-        markersize = globals.markersize ** 2
+        markersize = globals.min_markersize
         lat, lon, gpi = globals.index_names
         im = ax.scatter(df.index.get_level_values(lon),
                         df.index.get_level_values(lat),
