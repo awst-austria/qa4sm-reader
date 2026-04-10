@@ -8,14 +8,12 @@ import shutil
 import tempfile
 import sys
 from pathlib import Path
-
 from qa4sm_reader.intra_annual_temp_windows import TemporalSubWindowsCreator, InvalidTemporalSubWindowError
 from qa4sm_reader.globals import    METRICS, TC_METRICS, STABILITY_METRICS, NON_METRICS, METADATA_TEMPLATE, \
                                     IMPLEMENTED_COMPRESSIONS, ALLOWED_COMPRESSION_LEVELS, \
                                     INTRA_ANNUAL_METRIC_TEMPLATE, INTRA_ANNUAL_TCOL_METRIC_TEMPLATE, \
                                     TEMPORAL_SUB_WINDOW_SEPARATOR, DEFAULT_TSW, TEMPORAL_SUB_WINDOW_NC_COORD_NAME, \
-                                    MAX_NUM_DS_PER_VAL_RUN, DATASETS, OLD_NCFILE_SUFFIX
-
+                                    MAX_NUM_DS_PER_VAL_RUN, DATASETS, OLD_NCFILE_SUFFIX, status_replace
 
 class TemporalSubWindowMismatchError(Exception):
     '''Exception raised when the temporal sub-windows provided do not match the ones present in the provided netCDF file.'''
@@ -24,7 +22,6 @@ class TemporalSubWindowMismatchError(Exception):
         super().__init__(
             f'The temporal sub-windows provided ({provided}) do not match the ones present in the provided netCDF file ({expected}).'
         )
-
 
 
 class Pytesmo2Qa4smResultsTranscriber:
@@ -209,7 +206,7 @@ class Pytesmo2Qa4smResultsTranscriber:
         ]
         return any(
             tcol_metric_name.startswith(prefix) for prefix in valid_prefixes)
-    
+
     def is_valid_stability_metric_name(self, metric_name):
         """
         Checks if a given stability metric name is valid, based on the defined `globals.INTRA_ANNUAL_METRIC_TEMPLATE`.
@@ -294,12 +291,17 @@ class Pytesmo2Qa4smResultsTranscriber:
         For all variables starting with 'slope', replace all tsw values ('2010', '2011', etc.) with NaN 
         except for the default tsw.
         """
-        slope_vars = [var for var in self.transcribed_dataset if var.startswith("slope")]
+        slope_vars = [
+            var for var in self.transcribed_dataset if var.startswith("slope")
+        ]
 
         for var in slope_vars:
-            if TEMPORAL_SUB_WINDOW_NC_COORD_NAME in self.transcribed_dataset[var].dims:              
-                mask = self.transcribed_dataset[var][TEMPORAL_SUB_WINDOW_NC_COORD_NAME] == DEFAULT_TSW
-                self.transcribed_dataset[var] = self.transcribed_dataset[var].where(mask, other=np.nan)
+            if TEMPORAL_SUB_WINDOW_NC_COORD_NAME in self.transcribed_dataset[
+                    var].dims:
+                mask = self.transcribed_dataset[var][
+                    TEMPORAL_SUB_WINDOW_NC_COORD_NAME] == DEFAULT_TSW
+                self.transcribed_dataset[var] = self.transcribed_dataset[
+                    var].where(mask, other=np.nan)
 
     @staticmethod
     def update_dataset_var(ds: xr.Dataset, var: str, coord_key: str,
@@ -424,7 +426,7 @@ class Pytesmo2Qa4smResultsTranscriber:
 
     def build_outname(self, root: str, keys: List[Tuple[str]], val_type="temporal") -> str:
         """
-        Build the output name for the NetCDF file. Slight alteration of the original function from pytesmo
+        Build the output names for the NetCDF and Zarr files. Slight alteration of the original function from pytesmo
         `pytesmo.validation_framework.results_manager.build_filename`.
 
         Parameters
@@ -439,8 +441,8 @@ class Pytesmo2Qa4smResultsTranscriber:
 
         Returns
         -------
-        str
-            The output name for the NetCDF file.
+        Tuple[Path, Path]
+            The output names for the NetCDF and Zarr files (outname, outname_zarr).
 
         """
 
@@ -453,12 +455,13 @@ class Pytesmo2Qa4smResultsTranscriber:
                     ds_names.append(ds)
 
         fname = "_with_".join(ds_names)
-        ext = "nc"
-        if len(str(Path(root) / f"{fname}.{ext}")) > 255:
+        
+        # Check length with nc extension first
+        if len(str(Path(root) / f"{fname}.nc")) > 255:
             ds_names = [str(ds[0]) for ds in key]
             fname = "_with_".join(ds_names)
 
-            if len(str(Path(root) / f"{fname}.{ext}")) > 255:
+            if len(str(Path(root) / f"{fname}.nc")) > 255:
                 fname = "validation"
         if val_type=="temporal":
             self.outname = Path(root) / f"{fname}.{ext}"
@@ -530,37 +533,6 @@ class Pytesmo2Qa4smResultsTranscriber:
                     if i < retry_count - 1:
                         time.sleep(1)
 
-        # for var in self.transcribed_dataset.data_vars:
-        #     # Check if the data type is Unicode (string type)
-        #     if self.transcribed_dataset[var].dtype.kind == 'U':
-        #         # Find the maximum string length in this variable
-        #         max_len = self.transcribed_dataset[var].str.len().max().item()
-        #
-        #         # Create a character array of shape (n, max_len), where n is the number of strings
-        #         char_array = np.array([
-        #             list(s.ljust(max_len))
-        #             for s in self.transcribed_dataset[var].values
-        #         ],
-        #                               dtype=f'S1')
-        #
-        #         # Create a new DataArray for the character array with an extra character dimension
-        #         self.transcribed_dataset[var] = xr.DataArray(
-        #             char_array,
-        #             dims=(self.transcribed_dataset[var].dims[0],
-        #                   f"{var}_char"),
-        #             coords={
-        #                 self.transcribed_dataset[var].dims[0]:
-        #                 self.transcribed_dataset[var].coords[
-        #                     self.transcribed_dataset[var].dims[0]]
-        #             },
-        #             attrs=self.transcribed_dataset[var].
-        #             attrs  # Preserve original attributes if needed
-        #         )
-
-        # Ensure the dataset is closed
-        if isinstance(self.transcribed_dataset, xr.Dataset):
-            self.transcribed_dataset.close()
-
         # Write the transcribed dataset to a new NetCDF file
         self.transcribed_dataset.to_netcdf(
             path=path,
@@ -569,6 +541,65 @@ class Pytesmo2Qa4smResultsTranscriber:
         )
 
         return path
+
+
+    def write_to_zarr_filtered(self,
+                            path: str,
+                            tsw_value: str = DEFAULT_TSW,
+                            mode: str = 'w') -> str:
+        """
+        Write only the DEFAULT_TSW slice to zarr, directly from memory.
+
+        This mirrors the reliability of to_netcdf() by using the same 
+        in-memory dataset rather than re-reading from disk.
+
+        Parameters
+        ----------
+        path : str
+            Output zarr path
+        tsw_value : str
+            The temporal sub-window to extract (typically DEFAULT_TSW)
+        mode : str
+            Write mode, default 'w'
+
+        Returns
+        -------
+        str
+            Path to the zarr store
+        """
+        # Filter to single TSW if the coord exists
+        if tsw_value and TEMPORAL_SUB_WINDOW_NC_COORD_NAME in self.transcribed_dataset.coords:
+            ds_filtered = self.transcribed_dataset.sel({TEMPORAL_SUB_WINDOW_NC_COORD_NAME: tsw_value}).drop_vars(TEMPORAL_SUB_WINDOW_NC_COORD_NAME)
+        else:
+            ds_filtered = self.transcribed_dataset
+
+        # Build encoding - mimic what works for NetCDF
+        encoding = {}
+        for var in ds_filtered.variables:
+            # Replace values in status variables
+            if str(var).startswith('status'):
+                data = ds_filtered[var].values.copy()
+                for old, new in status_replace.items():
+                    data[data == old] = new
+                ds_filtered[var] = (ds_filtered[var].dims, data, ds_filtered[var].attrs)
+
+            if np.issubdtype(ds_filtered[var].dtype, np.number):
+                encoding[str(var)] = {'compressor': None}
+        # Ensure the dataset is closed
+        if isinstance(self.transcribed_dataset, xr.Dataset):
+            self.transcribed_dataset.close()
+
+        # Write directly - NO dask, NO chunking, just like netcdf4
+        ds_filtered.to_zarr(
+            store=path,
+            mode=mode,
+            encoding=encoding,
+            compute=True,
+            consolidated=True
+        )
+
+
+
 
     def compress(self,
                  path: str,
@@ -601,7 +632,8 @@ class Pytesmo2Qa4smResultsTranscriber:
                         'complevel': complevel
                     }
                     for var in ds.variables
-                    if not np.issubdtype(ds[var].dtype, np.object_) and ds[var].dtype.kind in {'i', 'u', 'f'}
+                    if not np.issubdtype(ds[var].dtype, np.object_)
+                    and ds[var].dtype.kind in {'i', 'u', 'f'}
                 }
 
             try:
@@ -760,7 +792,6 @@ class Pytesmo2Qa4smResultsTranscriber:
             if all(tsw.isdigit() for tsw in custom_tsws):
                 custom_tsws = sorted(custom_tsws, key=int)
 
-            
             lens = {len(tsw) for tsw in tsw_list}
 
             if lens == {2} and all(

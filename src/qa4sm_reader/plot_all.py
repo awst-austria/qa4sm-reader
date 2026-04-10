@@ -13,6 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+
 def plot_comparison(comparison_periods, 
                     filepath, 
                     out_dir=None, 
@@ -89,6 +90,7 @@ def plot_comparison(comparison_periods,
                 fnames_cbplot.extend(spth)
     return fnames_cbplot
 
+
 def plot_all(filepath: str,
              temporal_sub_windows: List[str] = None,
              metrics: list = None,
@@ -107,20 +109,23 @@ def plot_all(filepath: str,
 
     Parameters
     ----------
-    filepath : str
+    filepath: str
         path to the *.nc file to be processed.
     temporal_sub_windows : List[str], optional (default: None)
         List of temporal sub-windows to be processed. If None, all periods present are automatically extracted from the file.
-    metrics : set or list, optional (default: None)
+    metrics: set or list, optional (default: None)
         metrics to be plotted. If None, all metrics with data are plotted
-    extent : tuple, optional (default: None)
+    extent: tuple, optional (default: None)
         Area to subset the values for -> (min_lon, max_lon, min_lat, max_lat)
-    out_dir : str, optional (default: None)
+    out_dir: str, optional (default: None)
         Path to output generated plot. If None, defaults to the current working directory.
     out_type: str or list
         extensions which the files should be saved in
     save_all: bool, optional (default: True)
         all plotted images are saved to the output directory
+    save_zarr: bool, optional (default: True)
+        netcdf file is transformed into additional zarr with all variables,
+        for fast tile creation of interactive maps
     save_metadata: str or bool, optional (default: 'never')
         for each metric, metadata plots are provided
         (see plotter.QA4SMPlotter.plot_save_metadata)
@@ -131,7 +136,7 @@ def plot_all(filepath: str,
                                of points is above the `meta_boxplot_min_size`
                                threshold from globals.py. Otherwise a warning
                                is printed.
-    save_csv: bool, optional. Default is True.
+    save_csv: bool, optional (default: True)
         save a .csv file with the validation statistics
     val_type: str, optional (default: 'temporal')
         'temporal' creates graphs for temporal validation
@@ -149,6 +154,7 @@ def plot_all(filepath: str,
     fnames_csv: list
     fnames_cbplot: list
         list of filenames for created comparison boxplots
+    fnames_zarr: list
     """
     if isinstance(save_metadata, bool):
         if not save_metadata:
@@ -168,7 +174,8 @@ def plot_all(filepath: str,
 
     comparison_periods = None
     if temporal_sub_windows is None:
-        periods = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(filepath)
+        periods = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(
+            filepath)
     else:
         periods = np.array(temporal_sub_windows)
     # Filter out all items that are purely digits 

@@ -21,22 +21,24 @@ classifiers = [
 ]
 keywords = []
 dependencies = [
+    "cartopy>=0.23.0",
+    "colorcet",
+    "h5netcdf",
     'importlib-metadata; python_version<"3.8"',
-    "xarray>=2024.0.0",
-    "pandas",
-    "numpy",
     "netcdf4<1.7.3",
     "h5netcdf",
     "h5py",
     "matplotlib",
-    "pyQt5",
-    "seaborn",
-    "cartopy>=0.23.0",
-    "colorcet",
+    "numpy",
+    "pandas",
     "parse",
-    "scipy",
     "pygeogrids",
+    "pyQt5",
     "pytesmo",
+    "scipy",
+    "seaborn",
+    "xarray>=2024.0.0",
+    "zarr"
 ]
 dynamic = ["version"]
 
