@@ -31,7 +31,7 @@ import matplotlib.ticker as mticker
 import matplotlib.gridspec as gridspec
 import matplotlib.dates as mdates
 import matplotlib.patheffects as path_effects
-from matplotlib.collections import LineCollection
+from matplotlib.collections import LineCollection, PolyCollection
 from matplotlib.legend_handler import HandlerLineCollection, HandlerTuple
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from matplotlib.patches import Patch, PathPatch, Rectangle
@@ -714,6 +714,8 @@ def add_logo_in_bg_front(
     logo_width_fig  = logo_width_px  / (fig.get_figwidth()  * dpi)
 
     for ax in fig.get_axes():
+        if hasattr(ax, '_colorbar'):
+            continue
         # axis position in figure coords
         bbox = ax.get_position()
         if "bg" in position and not hasattr(ax, 'projection'):
@@ -874,6 +876,7 @@ def add_logo_to_figure(
         left = 1 - logo_width_fig + offset.x
 
     # Add logo axis
+
     ax_logo = fig.add_axes([left, bottom, logo_width_fig, logo_height_fig])
     ax_logo.imshow(im)
     ax_logo.axis("off")
@@ -2402,11 +2405,33 @@ def boxplot_metadata(
 
         return fig, axes
 
+def create_density_polygons(ax, verts, counts, cmap=globals._colormaps["n_obs"]):
+    """
+    Adds a PolyCollection to an axes where color is determined by observation counts.
+
+    Parameters:
+    ax (matplotlib.axes.Axes): The axes to plot on.
+    verts (list): A list of (N, 2) arrays defining polygon vertices.
+    counts (list or np.array): The number of observations per polygon.
+    cmap_name (str): Name of the Matplotlib colormap to use.
+    
+    Returns:
+    matplotlib.collections.PolyCollection: The added collection.
+    """
+    norm = plt.Normalize(vmin=min(counts), vmax=max(counts))
+    facecolors = np.array([cmap(norm(c)) for c in counts]).reshape(-1, 4)
+    poly_coll = PolyCollection(verts, facecolors=facecolors, edgecolors='none', zorder=-5)
+    ax.add_collection(poly_coll)
+    
+    return poly_coll
+
 def timeplot(
     df: pd.DataFrame,
     ci: list,
     metric: str,
     ref_short: str,
+    n_gpi:Optional[list] = None,
+    n_gpi_kind: Optional[str] = globals.n_gpi_kind, # "opacity-intensity-size"
     scl_short: Optional[str] = None,
     label: Optional[str] = None,
     figsize: Optional[Tuple[float, float]] = (10,10),
@@ -2428,6 +2453,13 @@ def timeplot(
             name of the metric for the plot
         ref_short : str
                 short_name of the reference dataset (read from netCDF file)
+        n_gpi : list, optional
+            List containing the number of gpi used for calculation at each timestamp
+        n_gpi_kind : str, optional 
+            String that determines how n_gpi info gets shown in the plot. Either 'opacity', 
+            'background', 'intensity', 'size' or a combination. For a combination pass a string 
+            adhering to a '{variant0}-{variant1}-...' format. 
+            Examples: 'opacity-background-intensity', 'background-opacity' 
         scl_short : str, default is None
             short_name of the scaling dataset (read from netCDF file).
             None if no scaling method is selected in validation.
@@ -2461,6 +2493,7 @@ def timeplot(
             v_min = mask_under
         if mask_over is not None:
             v_max = mask_over
+    limpad = 0.05*(v_max-v_min)
 
     # initialize plot
 
@@ -2476,19 +2509,56 @@ def timeplot(
         ax = axes[i]
         unique_color = get_color_for(col)
 
-        if mvaverage:        
         # Variant with markers
+
+        if n_gpi_kind is None or metric=="n_obs" or n_gpi is None:
+            n_gpi_kind = ""
+            ax.scatter(df.index, 
+                        df[col], 
+                        color="k", 
+                        label=col, 
+                        marker="o",
+                        s=globals.ts_scattersize,
+                        edgecolors="k",
+                        linewidths=1/4*globals.boxplot_edgewidth,
+                        zorder=2, 
+                        alpha=0.6)
+        else:
+            n_obs = (n_gpi - n_gpi.min()) / (n_gpi.max() - n_gpi.min())
+            obs_col = [(0.0, 0.0, 0.0) for i in n_obs.values] # All Facecolors are black if n_gpi not drawn with intensity
+            alpha = [0.6 for i in n_obs.values] # All Alpha are 0.6 if n_gpi not drawn with opacity
+            size = [globals.ts_scattersize for i in n_obs.values]
+            if 'intensity' in n_gpi_kind:
+                obs_col = [unique_color for i in n_obs.values]
+                obs_col = [(float(c[0]+(1-c[0])*(1-n_obs.values[i])), float(c[1]+(1-c[1])*(1-n_obs.values[i])), float(c[2]+(1-c[2])*(1-n_obs.values[i]))) for i, c in enumerate(obs_col)]
+                size = [globals.ts_scattersize_intensity for i in n_obs.values]
+            if 'opacity' in n_gpi_kind:
+                alpha = [float(max(0.1, i)) for i in n_obs.values] # Minimum value for alpha 0.1
+            if 'size' in n_gpi_kind:
+                size = [globals.ts_min_scattersize+(i-n_obs.values.min())*(globals.ts_max_scattersize-globals.ts_min_scattersize)/(n_obs.values.max()-n_obs.values.min()) for i in n_obs.values]
+            if 'background' in n_gpi_kind:
+                df_bg = df.resample("1D").mean() #Moving average to smooth short term fluctuations
+                # create vertices for polycollection
+                lower_bounds = df_bg.index-np.unique(df_bg.index.diff())[0]/2 # subtracts half of smallest timestep from every timestep in dataframe
+                upper_bounds = df_bg.index+np.unique(df_bg.index.diff())[0]/2 # adds half of smallest timestep to every timestep in dataframe
+                bottom = v_min-limpad
+                top = v_max+limpad
+                verts = [[(mdates.date2num(l), bottom), (mdates.date2num(u), bottom), (mdates.date2num(u), top), (mdates.date2num(l), top)] for l, u in zip(lower_bounds, upper_bounds)]
+                counts = n_gpi.resample("1D").mean().values
+                cmap_bg = globals._colormaps["n_obs"]
+                poly_coll = create_density_polygons(ax=ax, verts=verts, counts=counts, cmap=cmap_bg)
+
             ax.scatter(df.index, 
                             df[col], 
-                            color=unique_color, 
+                            color=obs_col, 
                             label=col, 
                             marker="o",
-                            s=10*globals.ts_linewidth,
+                            s=size,
                             edgecolors="k",
                             linewidths=1/4*globals.boxplot_edgewidth,
-                            zorder=2,
-                            alpha=0.4)
-
+                            zorder=2, 
+                            alpha=alpha)
+        if mvaverage:
             df_mva = df.resample(mva_window).mean()
             mva_line, = ax.plot(df_mva.index, 
                             df_mva[col], 
@@ -2497,21 +2567,6 @@ def timeplot(
                             linewidth=globals.ts_linewidth)
             mva_line.set_path_effects([path_effects.withStroke(linewidth=globals.ts_linewidth+2*globals.boxplot_edgewidth, foreground="k"),path_effects.Normal()])
 
-        else:
-            # Variant with markers and connection line
-            line, = ax.plot(df.index, 
-                            df[col], 
-                            color="k", 
-                            label=col, 
-                            linewidth=globals.boxplot_edgewidth/2,
-                            linestyle="-",
-                            marker="o",
-                            markersize=3*globals.ts_linewidth,
-                            markeredgecolor="k",
-                            markerfacecolor=unique_color,
-                            markeredgewidth=globals.boxplot_edgewidth/2,
-                            alpha=1)
-            
             #
             # line, = ax.plot(df.index, 
             #                 df[col], 
@@ -2545,7 +2600,6 @@ def timeplot(
         # styling
         ## limits
         ax.set_xlim(df.index.min(),df.index.max())
-        limpad = 0.05*(v_max-v_min)
         ax.set_ylim(v_min-limpad, v_max+limpad)
         ## grid
         ax.grid(which='major', color='gray', linestyle='dotted', linewidth=0.8)
@@ -2566,7 +2620,20 @@ def timeplot(
     ## labels
     x, y = th.smart_suplabel(fig, axis="y")
     fig.supylabel(label,x=x, y=y, fontsize=globals.fontsize_label)
-    # mark values which are masked?
+    ## Colorbar if 'background' in n_gpi_kind:
+    if 'background' in n_gpi_kind:
+        poly_coll.set_array(np.ravel(counts))
+        poly_coll.set_cmap(cmap_bg)
+        poly_coll.set_norm(plt.Normalize(vmin=min(counts), vmax=max(counts)))
+        poly_coll.set_clim(vmin=min(counts), vmax=max(counts))
+        fig, im, cax = _make_cbar(fig,
+                             ax,
+                             im=poly_coll,
+                             ref_short=ref_short,
+                             metric="n_obs",
+                             label="# of avg. observations per day",
+                             diff_map=False,
+                             scl_short=scl_short)
 
     return fig, axes
 

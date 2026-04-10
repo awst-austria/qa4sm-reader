@@ -229,6 +229,7 @@ class QA4SMPlotter:
             'boxplot_spatial': 'boxplot_spatial_{}',
             'barplot_basic': 'barplot_status',
             'mapplot_status': 'overview_status',
+            'mapplot_tc_status': 'overview_{}-{}_and_{}-{}_and_{}-{}_{}',
             'mapplot_common': 'overview_{}',
             'boxplot_tc': 'boxplot_{}_for_{}-{}',
             'boxplot_tc_spatial': 'boxplot_spatial_{}_for_{}-{}',
@@ -740,12 +741,7 @@ class QA4SMPlotter:
                                      period=period,
                                      Var=Var)
 
-            if type == "barplot_basic":
-                save_name = self.create_filename(Var,
-                                                type='barplot_basic',
-                                                period=period)
-
-            elif type == "timeplot_bar":
+            if type == "barplot_basic" or type == "timeplot_bar":
                 d = th.get_dataset_dict(Var)
                 parts = parse("{metric}_between_{ref_id:d}-{ref_ds}_and_{sat_id0:d}-{sat_ds0}", Var.varname)
                 save_name = self._filenames_lut('timeplot_bar').format(parts["ref_id"],
@@ -753,6 +749,8 @@ class QA4SMPlotter:
                                                                         parts["sat_id0"],
                                                                         parts["sat_ds0"],
                                                                         parts["metric"])
+                if period:
+                    save_name = f'{period}_{save_name}'
             elif type == "timeplot_bar_tc": #if tc meta
                 d = th.get_dataset_dict(Var)
                 parts = parse("{metric}_between_{ref_id:d}-{ref_ds}_and_{sat_id0:d}-{sat_ds0}_and_{sat_id1:d}-{sat_ds1}", Var.varname)
@@ -763,6 +761,8 @@ class QA4SMPlotter:
                                                                         parts["sat_id1"],
                                                                         parts["sat_ds1"],
                                                                         parts["metric"])
+                if period:
+                    save_name = f'{period}_{save_name}'
 
             if save_files:
                 fnames.extend(self._save_plot(save_name, out_types=out_types))
@@ -848,12 +848,37 @@ class QA4SMPlotter:
 
         # title and plot settings depend on the metric group
         if Var.varname.startswith('status'):
-            title = self.create_title(Var=Var,
-                                      type='mapplot_status',
-                                      period=period)
-            save_name = self.create_filename(Var=Var,
-                                             type="mapplot_status",
-                                             period=period)
+            if Var.g == "triple":
+                d = th.get_dataset_dict(Var, type="save_name")
+                save_name = self._filenames_lut('mapplot_tc_status').format(Var.ref_ds[0],
+                                                                        d[Var.ref_ds[0]], 
+                                                                        Var.metric_ds[0],
+                                                                        d[Var.metric_ds[0]], 
+                                                                        Var.other_ds[0],
+                                                                        d[Var.other_ds[0]],
+                                                                        Var.metric)
+            else:
+                d = th.get_dataset_dict(Var, type="save_name")
+                save_name = self._filenames_lut('mapplot_double').format(Var.ref_ds[0],
+                                                                        d[Var.ref_ds[0]], 
+                                                                        Var.metric_ds[0],
+                                                                        d[Var.metric_ds[0]],
+                                                                        Var.metric)
+                
+            if Var.g == "pairwise":
+                d = th.get_dataset_dict(Var)
+                parts = parse("{metric}_between_{ref_id:d}-{ref_ds}_and_{sat_id0:d}-{sat_ds0}", Var.varname)
+                title = self._titles_lut('timeplot_bar').format(d[parts["ref_id"]], 
+                                                                d[parts["sat_id0"]])
+            elif Var.g == "triple": #if tc meta
+                d = th.get_dataset_dict(Var)
+                parts = parse("{metric}_between_{ref_id:d}-{ref_ds}_and_{sat_id0:d}-{sat_ds0}_and_{sat_id1:d}-{sat_ds1}", Var.varname)
+                title = self._titles_lut('timeplot_bar_tc').format(d[parts["ref_id"]], 
+                                                                    d[parts["sat_id0"]], 
+                                                                    d[parts["sat_id1"]])
+            if period:
+                save_name = f'{period}_{save_name}'
+
         elif Var.g == 'common':
             title = "{} between all datasets".format(
                 globals._metric_name[metric])
@@ -899,6 +924,7 @@ class QA4SMPlotter:
                             type: str,
                             period: str = None,
                             ci=None,
+                            n_gpi: pd.DataFrame = None,
                             offset=0.07,
                             Var=None,
                             **kwargs) -> tuple:
@@ -913,6 +939,8 @@ class QA4SMPlotter:
         type: str
             one of _titles_lut
         ci : list of Dataframes containing "upper" and "lower" CIs
+        n_gpi: pd.DataFrame, optional
+            Dataframe containing the number of gpi used for calculation at each timestamp
         offset: float
             offset of boxplots
         Var: QA4SMMetricVariable, optional. Default is None
@@ -941,6 +969,7 @@ class QA4SMPlotter:
                 df=df,
                 ci=ci,
                 ref_short=unit_ref,
+                n_gpi=n_gpi,
                 label=label,
                 figsize=figsize,
             )
@@ -960,7 +989,7 @@ class QA4SMPlotter:
                                             Var, 
                                             loc=th.best_legend_pos_exclude_list(ax[0], forbidden_locs=globals.leg_loc_forbidden+[globals.leg_loc_dict["upper right"]]))
 
-        if globals.draw_logo:
+        if globals.draw_logo: # Why does it do that for every axis
             plm.add_logo_to_figure(fig=fig)
 
         return fig, ax
@@ -992,9 +1021,7 @@ class QA4SMPlotter:
         fnames = []
         for Var in self.img._iter_vars(type="metric",
                                        filter_parms={"metric": metric}):
-            if len(self.img.triple
-                   ) and Var.g == 'pairwise' and metric == 'status':
-                continue
+
             if not (np.isnan(Var.values.to_numpy()).all() or Var.is_CI):
                 fns = self.mapplot_var(Var,
                                        period=period,
@@ -1015,6 +1042,7 @@ class QA4SMPlotter:
                        metric: str,
                        period: str = None,
                        out_types: Optional[Union[List[str], str]] = 'png',
+                       n_gpi: bool = globals.n_gpi_in_timeplot,
                        save_files: bool = False,
                        out_name: str = None,
                        **plotting_kwargs) -> list:
@@ -1027,6 +1055,9 @@ class QA4SMPlotter:
             Name of a metric. File is searched for variables for that metric.
         out_types: str or list of str, Optional
             extensions which the files should be saved in. Default is 'png'
+        n_gpi: bool, optional, Default is False
+            Determines if information about # of gpi used for calculation is shown 
+            in every plot.
         save_files: bool, optional. Default is False
             wether to save the file in the output directory
         out_name: str
@@ -1040,6 +1071,17 @@ class QA4SMPlotter:
         """
         fnames, values = [], []
         ci = {}
+        if n_gpi:
+            values_ngpi = []
+            for df, Var, var_ci in self._yield_values(metric="n_obs", 
+                                                    short_caption=False,
+                                                    tc=True if metric in globals.TC_METRICS else False):
+                values_ngpi.append(df)
+
+            values_ngpi = pd.concat(values_ngpi, axis=1)
+            values_ngpi.columns = [col.split("\n")[0].replace("Datasets: ", "") for col in values_ngpi.columns]
+        else:
+            values_ngpi=None
         # we take the last iterated value for Var and use it for the file name
         for df, Var, var_ci in self._yield_values(metric=metric, 
                                                   short_caption=False,
@@ -1055,12 +1097,15 @@ class QA4SMPlotter:
         values = pd.concat(values, axis=1)
         values.columns = [col.split("\n")[0].replace("Datasets: ", "") for col in values.columns]
 
+
+
         fig, ax = self._timeplot_definition(metric=metric,
                                            df=values,
                                            type='timeplot_basic',
                                            period=period,
                                            ci=ci,
                                            Var=Var,
+                                           n_gpi=values_ngpi,
                                            **plotting_kwargs)
         if not out_name:
             out_name = self.create_filename(Var,
@@ -1080,6 +1125,7 @@ class QA4SMPlotter:
                        metric: str,
                        period: str = None,
                        out_types: Optional[Union[List[str], str]] = 'png',
+                       n_gpi: bool = globals.n_gpi_in_timeplot,
                        save_files: bool = False,
                        out_name: str = None,
                        **plotting_kwargs) -> list:
@@ -1092,6 +1138,9 @@ class QA4SMPlotter:
             Name of a metric. File is searched for variables for that metric.
         out_types: str or list of str, Optional
             extensions which the files should be saved in. Default is 'png'
+        n_gpi: bool, optional
+            Determines if information about observations per timestamp is shown
+            in every timeseries plot
         save_files: bool, optional. Default is False
             wether to save the file in the output directory
         out_name: str
@@ -1106,6 +1155,16 @@ class QA4SMPlotter:
         fnames = []
         # group Vars and CIs relative to the same dataset
         metric_tc, ci = {}, {}
+        if n_gpi:
+            values_ngpi = []
+            for df, Var, var_ci in self._yield_values(metric="n_obs", 
+                                                    short_caption=False,
+                                                    tc=True if metric in globals.TC_METRICS else False):
+                values_ngpi.append(df)
+            values_ngpi = pd.concat(values_ngpi, axis=1)
+            values_ngpi.columns = [col.split("\n")[0].replace("Datasets: ", "") for col in values_ngpi.columns]
+        else:
+            values_ngpi = None
 
         for df, Var, var_ci in self._yield_values(metric=metric, tc=True):
             id = Var.metric_ds[0]
@@ -1140,6 +1199,7 @@ class QA4SMPlotter:
                                             period=period,
                                             ci=ci_id,
                                             Var=Var,
+                                            n_gpi=values_ngpi,
                                             **plotting_kwargs)
             out_name = self.create_filename(Var,
                                             type='timeplot_tc',
@@ -1243,10 +1303,18 @@ class QA4SMPlotter:
         if self.img.val_type in ["temporal"]:
             # Boxplots and Barplots should be moved out at a later date and be modified to work with spatial validation results
             if Metric.name == 'status':
-                fnames_bplot = self.barplot(metric='status',
-                                            period=period,
-                                            out_types=out_types,
-                                            save_files=save_all)
+                if Metric.g == 'triple':
+                    fnames_bplot = self.barplot(metric='status',
+                                                period=period,
+                                                out_types=out_types,
+                                                save_files=save_all,
+                                                type='timeplot_bar_tc') # Looks wrong but is the same between temporal and spatial val
+                else:
+                    fnames_bplot = self.barplot(metric='status',
+                                                period=period,
+                                                out_types=out_types,
+                                                save_files=save_all,
+                                                type='timeplot_bar')
 
             elif Metric.g == 'common' or Metric.g == 'pairwise' or Metric.g == 'pairwise_stability':
                 fnames_bplot = self.boxplot_basic(metric=metric,
@@ -1763,6 +1831,8 @@ class QA4SMPlotter:
             
             parts = None
             d = th.get_dataset_dict(Var)
+            d_save = th.get_dataset_dict(Var, type="save_name")
+            # Parsing necessary because it is unregular Variable
             parts = parse("{metric}_between_{ref_id:d}-{ref_ds}_and_{sat_id0:d}-{sat_ds0}_and_{sat_id1:d}-{sat_ds1}", Var.varname)
 
             if not parts:
@@ -1771,9 +1841,9 @@ class QA4SMPlotter:
                                                                     d[parts["ref_id"]], 
                                                                     d[parts["sat_id0"]])
                 save_name = self._filenames_lut('timeplot_meta').format(parts["ref_id"],
-                                                                        parts["ref_ds"], 
+                                                                        d_save[parts["ref_id"]], 
                                                                         parts["sat_id0"],
-                                                                        parts["sat_ds0"],
+                                                                        d_save[parts["sat_id0"]],
                                                                         parts["metric"])
             else: #if tc meta
                 title = self._titles_lut('mapplot_tc').format(parts["metric"].replace("_", " "), 
@@ -1781,12 +1851,15 @@ class QA4SMPlotter:
                                                                     d[parts["sat_id0"]], 
                                                                     d[parts["sat_id1"]])
                 save_name = self._filenames_lut('timeplot_meta_tc').format(parts["ref_id"],
-                                                                        parts["ref_ds"], 
+                                                                        d_save[parts["ref_id"]], 
                                                                         parts["sat_id0"],
-                                                                        parts["sat_ds0"], 
-                                                                        parts["sat_id1"],
-                                                                        parts["sat_ds1"],
+                                                                        d_save[parts["sat_id0"]], 
+                                                                        parts["sat_id0"],
+                                                                        d_save[parts["sat_id1"]],
                                                                         parts["metric"])
+                
+            if period:
+                save_name = f'{period}_{save_name}'
 
             # use title for plot, make logo
             th.set_wrapped_title(fig, ax, title)

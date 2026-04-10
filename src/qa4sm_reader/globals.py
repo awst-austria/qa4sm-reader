@@ -52,6 +52,8 @@ ax_width = 0.75
 ax_height = 0.8
 
 # === timeseries plot defaults ===
+n_gpi_in_timeplot = False #Determines if number of observations is presented in every timeseries plot
+n_gpi_kind = "opacity-intensity" # Determines how observation information is presented in every timeplot
 ts_figwidth = 12  # size of the output figure in inches.
 ts_figheight_per_ax = 3
 
@@ -60,6 +62,12 @@ ts_axh = 50 #size of axheight in relation to padding size
 ts_axw = 150 #size of axwidth in relation to padding size 
 
 ts_linewidth=1.6 #linewidth of timeseries plots
+
+# Size of Points in Scatterplot
+ts_scattersize=8
+ts_scattersize_intensity=16
+ts_min_scattersize=4
+ts_max_scattersize=36
 
 # === map plot defaults ===
 scattered_datasets = [
