@@ -123,9 +123,6 @@ def plot_all(filepath: str,
         extensions which the files should be saved in
     save_all: bool, optional (default: True)
         all plotted images are saved to the output directory
-    save_zarr: bool, optional (default: True)
-        netcdf file is transformed into additional zarr with all variables,
-        for fast tile creation of interactive maps
     save_metadata: str or bool, optional (default: 'never')
         for each metric, metadata plots are provided
         (see plotter.QA4SMPlotter.plot_save_metadata)
@@ -154,7 +151,6 @@ def plot_all(filepath: str,
     fnames_csv: list
     fnames_cbplot: list
         list of filenames for created comparison boxplots
-    fnames_zarr: list
     """
     if isinstance(save_metadata, bool):
         if not save_metadata:

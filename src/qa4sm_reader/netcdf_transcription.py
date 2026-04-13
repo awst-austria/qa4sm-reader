@@ -424,7 +424,7 @@ class Pytesmo2Qa4smResultsTranscriber:
 
         return self.transcribed_dataset
 
-    def build_outname(self, root: str, keys: List[Tuple[str]], val_type="temporal") -> str:
+    def build_outname(self, root: str, keys: List[Tuple[str]], val_type="temporal") -> Tuple[Path, Path]:
         """
         Build the output names for the NetCDF and Zarr files. Slight alteration of the original function from pytesmo
         `pytesmo.validation_framework.results_manager.build_filename`.
@@ -436,13 +436,17 @@ class Pytesmo2Qa4smResultsTranscriber:
         keys : List[Tuple[str]]
             The keys of the pytesmo results.
         val_type : str
-            Either "spatial" or "temporal". Determines if the file contains spatial or temporal 
+            Either "spatial" or "temporal". Determines if the file contains spatial or temporal
             validation results.
 
         Returns
         -------
         Tuple[Path, Path]
             The output names for the NetCDF and Zarr files (outname, outname_zarr).
+            - outname: Path to the NetCDF file, suffixed with ".SPATIAL.nc" for spatial
+            validation results, or ".nc" for temporal validation results.
+            - outname_zarr: Path to the Zarr file, always suffixed with ".zarr" and based
+            on the temporal (non-spatial) filename.
 
         """
 
@@ -455,7 +459,7 @@ class Pytesmo2Qa4smResultsTranscriber:
                     ds_names.append(ds)
 
         fname = "_with_".join(ds_names)
-        
+
         # Check length with nc extension first
         if len(str(Path(root) / f"{fname}.nc")) > 255:
             ds_names = [str(ds[0]) for ds in key]
@@ -463,12 +467,15 @@ class Pytesmo2Qa4smResultsTranscriber:
 
             if len(str(Path(root) / f"{fname}.nc")) > 255:
                 fname = "validation"
-        if val_type=="temporal":
-            self.outname = Path(root) / f"{fname}.{ext}"
-            return self.outname
-        elif val_type=="spatial":
-            self.outname = Path(root) / f"{fname}.SPATIAL.{ext}"
-            return self.outname
+
+        self.outname_zarr = Path(root) / f"{fname}.zarr"
+
+        if val_type == "temporal":
+            self.outname = Path(root) / f"{fname}.nc"
+        elif val_type == "spatial":
+            self.outname = Path(root) / f"{fname}.SPATIAL.nc"
+
+        return self.outname, self.outname_zarr
 
     def write_to_netcdf(self,
                         path: str,
