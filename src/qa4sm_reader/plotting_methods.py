@@ -1521,42 +1521,46 @@ def boxplot(
             capsizing(cen, n_lines = n_lines)
 
             if ci:
-                c_lower = palette[ax_combos[i]] if new_coloring else"#87CFEBAA"
-                c_upper = palette[ax_combos[i]] if new_coloring else'#FF6347AA'
-                n_lines = len(ax.lines)
-                low = sns_custom_boxplot(data = ci[d],
-                                y = "lower",
-                                positions = [pos_lower],
-                                color = c_lower,
-                                showfliers=False,
-                                widths=widths_ci,
-                                ax=ax,
-                                orient="v",
-                                dodge=True,
-                                **kwargs)
-                capsizing(low, n_lines=n_lines)
-                l_low.append(ax.patches[-1]) # ax.patches[-1] gets last drawn patch
+                if ci[d].dropna().empty:
+                    ax.legend([],[], fontsize=globals.fontsize_legend, loc=th.best_legend_pos_exclude_list(ax))
+                    warnings.warn(f"Confidence Interval results are empty for {label}")
+                else:
+                    c_lower = palette[ax_combos[i]] if new_coloring else"#87CFEBAA"
+                    c_upper = palette[ax_combos[i]] if new_coloring else'#FF6347AA'
+                    n_lines = len(ax.lines)
+                    low = sns_custom_boxplot(data = ci[d],
+                                    y = "lower",
+                                    positions = [pos_lower],
+                                    color = c_lower,
+                                    showfliers=False,
+                                    widths=widths_ci,
+                                    ax=ax,
+                                    orient="v",
+                                    dodge=True,
+                                    **kwargs)
+                    capsizing(low, n_lines=n_lines)
+                    l_low.append(ax.patches[-1]) # ax.patches[-1] gets last drawn patch
 
-                n_lines = len(ax.lines)
-                up = sns_custom_boxplot(data = ci[d],
-                                y = "upper",
-                                positions = [pos_upper],
-                                color = c_upper,
-                                showfliers=False,
-                                widths=widths_ci,
-                                ax=ax,
-                                orient="v",
-                                dodge=True,
-                                **kwargs)
-                capsizing(up, n_lines=n_lines)
-                l_up.append(ax.patches[-1])
+                    n_lines = len(ax.lines)
+                    up = sns_custom_boxplot(data = ci[d],
+                                    y = "upper",
+                                    positions = [pos_upper],
+                                    color = c_upper,
+                                    showfliers=False,
+                                    widths=widths_ci,
+                                    ax=ax,
+                                    orient="v",
+                                    dodge=True,
+                                    **kwargs)
+                    capsizing(up, n_lines=n_lines)
+                    l_up.append(ax.patches[-1])
 
         if label is not None:
             x, y = th.smart_suplabel(fig, axis="y")
             fig.supylabel(label, fontsize = globals.fontsize_label, x=x, y=y)
             #insert xlabel here
 
-        if ci and new_coloring:
+        if ci and new_coloring and not ci[d].dropna().empty:
             dist = (ax.get_ylim()[1]-ax.get_ylim()[0])/globals.num_hatches
             for low in l_low:
                 triangle_hatching(ax, low, dist=dist, direction="down", color=low.get_facecolor()[:3], linewidth=globals.hatch_linewidth)
@@ -1576,7 +1580,7 @@ def boxplot(
         ax.set_xlabel(None)
         ax.set_ylabel(None)
 
-        if ci and not new_coloring:
+        if ci and not new_coloring and not ci[d].dropna().empty:
             low_patch = Patch(facecolor=c_lower, edgecolor="black")
             up_patch = Patch(facecolor=c_upper, edgecolor="black")
 
