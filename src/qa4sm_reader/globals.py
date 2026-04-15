@@ -12,6 +12,7 @@ import numpy as np
 import colorcet
 import seaborn as sns
 import os
+from matplotlib.colors import LinearSegmentedColormap
 
 # PLOT DEFAULT SETTINGS
 # =====================================================
@@ -24,7 +25,7 @@ no_print_period = ["bulk"] # List of period names which should not be printed in
 
 dpi_min = 100  # Resolution in which plots are going to be rendered.
 dpi_max = 200
-title_pad = 12.0  # Padding below the title in points. default padding is matplotlib.rcParams['axes.titlepad'] = 6.0
+title_pad = 12  # Padding below the title in points. default padding is matplotlib.rcParams['axes.titlepad'] = 6.0
 data_crs = ccrs.PlateCarree()  # Default map projection. use one of
 legend_alpha = 0.85
 ci_alpha = 0.4
@@ -257,14 +258,20 @@ _cclasses_old = {
         'PuOr'
     ]  # diverging colormap for slopeURMSD
 }
-
+def trim_colormap(cmap, start=0.0, stop=1.0, num_colors=256):
+    """
+    Create a new colormap by taking a subset of an existing one.
+    """
+    colors = cmap(np.linspace(start, stop, num_colors))
+    return LinearSegmentedColormap.from_list('trimmed_cmap', colors)
+    
 # new cclasses
 _cclasses_new = {
     'div_better': colorcet.m_CET_D1A_r,  # diverging: 1 good, 0 special, -1 bad (pearson's R, spearman's rho')
     'div_worse': colorcet.m_CET_D1A,  # diverging: 1 bad, 0 special, -1 good (difference of bias)
     'div_neutr':colorcet.m_CET_D13,  # diverging: zero good, +/- neutral: (bias)
-    'seq_worse': colorcet.m_CET_L18,  # sequential: increasing value bad (p_R, p_rho, rmsd, ubRMSD, RSS)
-    'seq_better': colorcet.m_blues,  # sequential: increasing value good (n_obs, STDerr)
+    'seq_worse': trim_colormap(colorcet.m_CET_L18, start=0.05, stop=1.0),  # sequential: increasing value bad (p_R, p_rho, rmsd, ubRMSD, RSS)
+    'seq_better': trim_colormap(colorcet.m_blues, start=0.05, stop=1.0),  # sequential: increasing value good (n_obs, STDerr)
     'qua_neutr':
     get_status_colors(),  # qualitative category with 2 forced colors
     # Added colormaps for slope metrics
@@ -929,6 +936,7 @@ _metadata_exclude = [
 ]
 
 METRIC_TEMPLATE = '_between_{ds1}_and_{ds2}'
+METRIC_TC_TEMPLATE = '_between_{ds1}_and_{ds2}_and_{ds3}'
 METRIC_CI_TEMPLATE = '{metric}_ci_{bound}_between_{ds1}_and_{ds2}_{ending}'
 
 

@@ -2894,7 +2894,6 @@ def mapplot(
                       loc='lower center',
                       ncol=4,
                       fontsize=globals.fontsize_legend)
-
     style_map(ax, plot_extent, **style_kwargs)
     if ref_short in globals.scattered_datasets or is_scattered:
         if len(df) < 400: # For a high amount of points the minimum markersize is kept
