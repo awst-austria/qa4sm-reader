@@ -6,6 +6,7 @@ import calendar
 import time
 import shutil
 import tempfile
+import asyncio
 import sys
 from pathlib import Path
 from qa4sm_reader.intra_annual_temp_windows import TemporalSubWindowsCreator, InvalidTemporalSubWindowError
@@ -574,6 +575,13 @@ class Pytesmo2Qa4smResultsTranscriber:
         str
             Path to the zarr store
         """
+        try:
+            # Check if a loop exists in this thread
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            # If not, create a new one for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
         # Filter to single TSW if the coord exists
         if tsw_value and TEMPORAL_SUB_WINDOW_NC_COORD_NAME in self.transcribed_dataset.coords:
             ds_filtered = self.transcribed_dataset.sel({TEMPORAL_SUB_WINDOW_NC_COORD_NAME: tsw_value}).drop_vars(TEMPORAL_SUB_WINDOW_NC_COORD_NAME)
