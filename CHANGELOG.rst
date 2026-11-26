@@ -4,6 +4,9 @@ Changelog
 
 Unreleased changes in master branch
 ===================================
+
+Version 0.12.4
+==============
 - Skip the FRM classification and instrument depth/soil type metadata plots
   when the ISMN sensors were merged (global attribute
   ``val_dc_ismn_sensor_merging{i}``)
