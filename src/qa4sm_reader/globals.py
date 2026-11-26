@@ -196,6 +196,9 @@ out_metadata_plots = {
     "frm_class": ['frm_class'],
     "network" : ['network'],
 }
+# metadata plots skipped when the ISMN sensors were merged: merged stations
+# have no FRM class and their depth is the span over all of their sensors
+out_metadata_plots_skip_merged = ["frm_class", "soil"]
 
 # === calculation errors (pytesmo) === #TODO: import from pytesmo
 status = {
@@ -377,6 +380,7 @@ _version_short_name_attr = 'val_dc_version{:d}'  # attribute convention for othe
 _version_pretty_name_attr = 'val_dc_version_pretty_name{:d}'  # attribute convention for other datasets
 _val_dc_variable_pretty_name = 'val_dc_variable_pretty_name{:d}'  # attribute convention for variable name
 _val_dc_unit = 'val_dc_unit{:d}'
+_val_dc_ismn_sensor_merging = 'val_dc_ismn_sensor_merging{:d}'  # 'True' if the sensors of each ISMN station were merged
 
 # format should have (metric, ds, ref, other ds)
 _variable_pretty_name = {

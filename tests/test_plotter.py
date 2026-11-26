@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 import tempfile
 import shutil
+import xarray as xr
 
 from qa4sm_reader.plotter import QA4SMPlotter
 from qa4sm_reader.img import QA4SMImg
@@ -118,6 +119,41 @@ def meta_plotter(plotdir):
     plotter = QA4SMPlotter(img, plotdir)
 
     return plotter
+
+
+@pytest.mark.parametrize("attr_value, merged", [(None, False),
+                                                ('False', False),
+                                                ('True', True)])
+def test_plot_save_metadata_ismn_sensors_merged(plotdir, attr_value, merged):
+    testfile = '0-ISMN.soil_moisture_with_1-C3S.sm.nc'
+    testfile_path = os.path.join(os.path.dirname(__file__), '..', 'tests',
+                                 'test_data', 'metadata', testfile)
+    ds = xr.load_dataset(testfile_path)
+    # the test file has no FRM classes, add some to get an FRM plot
+    ds['frm_class'] = ('loc', np.resize(
+        ['very representative', 'representative', 'undeducible'],
+        ds.sizes['loc']))
+    if attr_value is not None:
+        ds.attrs[globals._val_dc_ismn_sensor_merging.format(0)] = attr_value
+    nc_path = os.path.join(plotdir, testfile)
+    ds.to_netcdf(nc_path)
+
+    plotter = QA4SMPlotter(QA4SMImg(nc_path), plotdir)
+    assert plotter.img.ismn_sensors_merged == merged
+
+    fnames = plotter.plot_save_metadata('R',
+                                        out_types='png',
+                                        meta_boxplot_min_samples=0,
+                                        period=globals.DEFAULT_TSW)
+    fnames = [os.path.basename(f) for f in fnames]
+
+    def fname(meta):
+        return f'{globals.DEFAULT_TSW}_boxplot_R_metadata_{meta}.png'
+
+    for meta in ['lc_2010', 'climate_KG', 'network']:
+        assert fname(meta) in fnames
+    for meta in ['frm_class', 'instrument_depth_and_soil_type']:
+        assert (fname(meta) in fnames) != merged
 
 
 def test_mapplot(basic_plotter, plotdir):

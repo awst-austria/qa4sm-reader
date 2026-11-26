@@ -1723,6 +1723,9 @@ class QA4SMPlotter:
         2. Boxplot by Koeppen-Geiger climate classification
         3. Boxplot by instrument depth and soil type (granularity)
 
+        The plots in globals.out_metadata_plots_skip_merged are not created
+        when the ISMN sensors of each station were merged.
+
         Parameters
         ----------
         metric : str
@@ -1746,7 +1749,11 @@ class QA4SMPlotter:
         if not period:  #$$
             return filenames
 
+        sensors_merged = self.img.ismn_sensors_merged
+
         for meta_type, meta_keys in globals.out_metadata_plots.items():
+            if sensors_merged and meta_type in globals.out_metadata_plots_skip_merged:
+                continue
             try:
                 # the presence of instrument_depth in the out file depends on the ismn release version
                 if all(meta_key in self.img.metadata.keys()

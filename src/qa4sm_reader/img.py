@@ -168,6 +168,14 @@ class QA4SMImg(object):
         return name
 
     @property
+    def ismn_sensors_merged(self) -> bool:
+        """True if the sensors of each ISMN station of the reference were merged"""
+        attr = globals._val_dc_ismn_sensor_merging.format(
+            self.datasets._ref_dc())
+
+        return self.ds.attrs.get(attr) in [True, 'True']
+
+    @property
     def metadata(self) -> dict:
         """If the image has metadata (ISMN reference), return a dict of shape {varname: Metadata}. Else, False."""
         metadata = {}
