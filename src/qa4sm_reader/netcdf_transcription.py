@@ -588,7 +588,12 @@ class Pytesmo2Qa4smResultsTranscriber:
         else:
             ds_filtered = self.transcribed_dataset
 
-        # Build encoding - mimic what works for NetCDF
+        # Build encoding - mimic what works for NetCDF.
+        # zarr-python 3 uses 'compressors'; newer xarray rejects the v2 key 'compressor'.
+        import zarr
+        no_compression = ({'compressors': None}
+                          if int(zarr.__version__.split('.')[0]) >= 3
+                          else {'compressor': None})
         encoding = {}
         for var in ds_filtered.variables:
             # Replace values in status variables
@@ -599,7 +604,7 @@ class Pytesmo2Qa4smResultsTranscriber:
                 ds_filtered[var] = (ds_filtered[var].dims, data, ds_filtered[var].attrs)
 
             if np.issubdtype(ds_filtered[var].dtype, np.number):
-                encoding[str(var)] = {'compressor': None}
+                encoding[str(var)] = dict(no_compression)
         # Ensure the dataset is closed
         if isinstance(self.transcribed_dataset, xr.Dataset):
             self.transcribed_dataset.close()
