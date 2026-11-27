@@ -623,9 +623,12 @@ def test_globals_resolutions(dataset, dataset_res_should,
 
 
 def test_average_non_additive():
-    values = np.random.normal(0.6, 0.1, 40)
+    # Seeded: unseeded draws from N(0.6, 0.1) occasionally exceed 1, which is
+    # not a valid correlation (arctanh -> NaN) and made this test flaky.
+    rng = np.random.default_rng(42)
+    values = rng.normal(0.6, 0.1, 40)
     idx = np.linspace(0, 100, num=len(values))
-    nobs = np.random.normal(20, 3, 40).astype(int)
+    nobs = rng.normal(20, 3, 40).astype(int)
 
     # Add an invalid entry in the values
     values[4] = np.nan
