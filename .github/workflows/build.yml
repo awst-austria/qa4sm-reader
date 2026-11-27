@@ -60,23 +60,27 @@ jobs:
         shell: bash -l {0}
         run: |
           pytest
+      # The package is pure Python, so the wheel is identical on every OS.
+      # Build sdist + wheel on ONE job only: identically named wheels from
+      # several jobs collide when merged in the publish job and corrupt the zip.
       - name: Create wheel and dist package
+        if: matrix.os == 'ubuntu-latest'
         shell: bash -l {0}
         run: |
-          mkdir -p artifacts/dist
-          if [ ${{ matrix.os }} == "ubuntu-latest" ]
-          then
-            # build dist on linux
-            python -m build --outdir artifacts/dist
-          fi
-          python setup.py bdist_wheel --dist-dir artifacts/dist
-          ls artifacts/dist
-          twine check artifacts/dist/*
-      - name: Upload Artifacts
+          python -m build --outdir dist
+          ls dist
+          twine check dist/*
+      - name: Upload Environment Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Artifacts-py${{ matrix.python-version }}-${{ matrix.os }}
           path: artifacts/*
+      - name: Upload dist package
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
       - name: Upload Coverage
         shell: bash -l {0}
         run: |
@@ -111,20 +115,19 @@ jobs:
         run: |
           echo "GITHUB_REF = $GITHUB_REF"
           echo "GITHUB_REPOSITORY = $GITHUB_REPOSITORY"
-      - name: Download Artifacts
+      - name: Download dist package
         uses: actions/download-artifact@v4
         with:
-          path: Artifacts
-          pattern: Artifacts-*
-          merge-multiple: true
+          name: dist
+          path: dist
       - name: Display downloaded files
-        run: ls -aR
+        run: ls -alR dist
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           skip-existing: true
           verbose: true
           verify-metadata: true
-          packages-dir: Artifacts/dist/
+          packages-dir: dist/
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }} # this needs to be uploaded to github actions secrets
